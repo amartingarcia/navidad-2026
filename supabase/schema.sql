@@ -512,8 +512,9 @@ create policy fotos_subir on public.fotos for insert to authenticated
 
 drop policy if exists fotos_borrar on public.fotos;
 create policy fotos_borrar on public.fotos for delete to authenticated
-  using (jugador_id = auth.uid()
-         and not exists (select 1 from retos r where r.id = reto and r.hasta is not null and now() > r.hasta));
+  using (public.es_admin()
+         or (jugador_id = auth.uid()
+             and not exists (select 1 from retos r where r.id = reto and r.hasta is not null and now() > r.hasta)));
 
 drop policy if exists reac_leer on public.reacciones;
 create policy reac_leer on public.reacciones for select to authenticated using (true);
@@ -538,7 +539,7 @@ create policy fotos_obj_subir on storage.objects for insert to authenticated
 
 drop policy if exists fotos_obj_borrar on storage.objects;
 create policy fotos_obj_borrar on storage.objects for delete to authenticated
-  using (bucket_id = 'fotos' and (storage.foldername(name))[1] = auth.uid()::text);
+  using (bucket_id = 'fotos' and ((storage.foldername(name))[1] = auth.uid()::text or public.es_admin()));
 
 -- Read: own files, validated photos (wall) or pending photos if you are a juror.
 drop policy if exists fotos_obj_leer on storage.objects;

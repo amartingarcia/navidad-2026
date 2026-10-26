@@ -408,7 +408,8 @@
     return '<div class="muro">' + oks.map(function (f) {
       var r = reto(f.retoId);
       return '<figure class="foto-card"><img src="' + esc(f.img) + '" alt="' + esc(r.titulo) + '" loading="lazy">' +
-        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + (f.por ? '<br><small>Valorada por ' + esc(f.por) + '</small>' : '') + '</figcaption>' + barraReacciones(f) + '</figure>';
+        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + (f.por ? '<br><small>Valorada por ' + esc(f.por) + '</small>' : '') + '</figcaption>' + barraReacciones(f) +
+        (soyAdmin() ? '<button class="btn fantasma borrar-foto" data-acc="borrarFoto" data-id="' + esc(f.id) + '">🗑️ Borrar foto</button>' : '') + '</figure>';
     }).join('') + '</div>';
   }
 
@@ -665,6 +666,13 @@
       $modal.innerHTML = '<div class="modal-in"><h3>' + reto(f.retoId).icono + ' ' + esc(reto(f.retoId).titulo) + '</h3><p class="pista">' + esc(jugador(f.playerId).name) + '</p>' +
         '<img class="vista" src="' + esc(f.img) + '" alt="Foto del reto"><div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div></div>';
       if (!$modal.open) $modal.showModal();
+    },
+    borrarFoto: function (d) {
+      var f = S.photos.filter(function (x) { return x.id === d.id; })[0];
+      if (!f || !soyAdmin() || !window.confirm('¿Borrar esta foto de ' + jugador(f.playerId).name + '? No se puede deshacer.')) return;
+      API.del('fotos', 'id=eq.' + encodeURIComponent(f.id))
+        .then(function () { API.borrarObjeto(f.ruta); S.photos = S.photos.filter(function (x) { return x.id !== f.id; }); render(); })
+        .catch(function (e) { toast('No se pudo borrar: ' + (e.message || e)); });
     },
     reaccion: function (d) {
       var p = yo(), rs = S.reacciones[d.id] || (S.reacciones[d.id] = {}), lista = rs[d.e] || (rs[d.e] = []);

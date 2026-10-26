@@ -50,6 +50,12 @@ with sync_playwright() as p:
     pg.locator('button:has-text("Resetear")').first.click(); pg.wait_for_timeout(500)
     check('reset ok', m.jug[[k for k,v in m.enl.items() if v=='tok0'][0]]['cambio_pass'] is True)
     check('contraseña por defecto NO esta en el HTML renderizado sin escribirla', 'inicial-demo' not in open('app.js').read() and 'inicial-demo' not in open('index.html').read())
+    uid0=[k for k,v in m.jug.items() if not v['es_admin']][0]
+    m.fotos.append({'id':'f-del','jugador_id':uid0,'reto':'3','ruta':uid0+'/x.jpg','estado':'ok','creada':'2026-12-26T20:00:00+00:00','valorada_por':None})
+    pg.evaluate("location.hash='#/muro'"); pg.reload(); pg.wait_for_timeout(1500)
+    check('admin ve boton borrar foto', pg.locator('.borrar-foto').count()==1)
+    pg.locator('.borrar-foto').click(); pg.wait_for_timeout(700)
+    check('admin borra foto de otro', not any(f['id']=='f-del' for f in m.fotos) and pg.locator('.borrar-foto').count()==0)
     pg.wait_for_timeout(3500)
     check('salen Papás Noel borrachos', pg.locator('.santa').count()>=1 and len(pg.locator('.santa .dice').first.text_content())>3)
     pg.evaluate("NPGFIESTA.nuevo(0, false)"); pg.wait_for_timeout(300)

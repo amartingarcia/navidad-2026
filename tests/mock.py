@@ -118,6 +118,9 @@ class Mock:
             self.fotos.append(f); return 201,[f]
         if method=='DELETE' and t=='fotos':
             f = {k:v[0].replace('eq.','',1) for k,v in q.items()}
+            if 'id' in f:
+                assert self.admin(uid),'permission denied'
+                self.fotos=[x for x in self.fotos if x['id']!=f['id']]; return 204,None
             self.fotos=[x for x in self.fotos if not (x['jugador_id']==uid and x['reto']==f['reto'])]; return 204,None
         if method=='POST' and t=='reacciones':
             d=json.loads(body); assert d['jugador_id']==uid and any(f['id']==d['foto_id'] and f['estado']=='ok' for f in self.fotos),'new row violates row-level security policy for table "reacciones"'

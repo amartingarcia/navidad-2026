@@ -322,3 +322,5 @@ body.disco .lema::before { content: "🪩 "; }
 @media (prefers-reduced-motion: reduce) { .pum .trozo, .pum .boom { animation: none; opacity: 0; } }
 
 .pum .taco.gime { background: #ff3ea5; box-shadow: 0 4px 0 #b21f72; }
+
+.borrar-foto { margin: 0 .6rem .6rem; font-size: .85rem; }

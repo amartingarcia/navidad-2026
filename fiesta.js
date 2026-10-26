@@ -94,7 +94,6 @@
       sa.setAttribute('aria-hidden', 'true');
       sa.addEventListener('animationend', function (e) { if (e.animationName === 'paseo' || e.animationName === 'paseo-izq') { clearTimeout(sa.eructoT); sa.remove(); } });
       document.body.appendChild(sa);
-      if (!esMama) sa.eructoT = setTimeout(eructo, dur * 1000 * .3); // justo cuando le sale el bocadillo (se cancela si lo explotan)
     }, retardo);
   }
   // Cada cierto rato salen entre 1 y 3 Papás Noel (más y más seguidos en modo discoteca).
