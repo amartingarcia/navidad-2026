@@ -16,17 +16,15 @@ jobs:
     name: Ping Supabase DB
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - name: Keep-alive — read-only RPC calls
         env:
           # Repository secrets (Settings -> Secrets and variables -> Actions).
-          SECRET_URL: ${{ secrets.SUPABASE_URL }}
-          SECRET_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_ANON_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           set -euo pipefail
-          # Secrets win; if they are missing, fall back to the public values shipped in config.js.
-          SUPABASE_URL="${SECRET_URL:-$(grep -oP "SUPABASE_URL:\s*'\K[^']+" config.js)}"
-          SUPABASE_KEY="${SECRET_KEY:-$(grep -oP "SUPABASE_KEY:\s*'\K[^']+" config.js)}"
+          : "${SUPABASE_URL:?Missing repository secret SUPABASE_URL}"
+          : "${SUPABASE_KEY:?Missing repository secret SUPABASE_KEY}"
 
           FAILED=0
           for i in 1 2 3; do
