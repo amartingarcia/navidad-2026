@@ -30,18 +30,6 @@ window.NPG = {
       pista: 'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.' }
   ],
 
-  // Multas de ejemplo (importes a decidir por el grupo).
-  SANCIONES: [
-    { id: 's1', concepto: 'Llegar tarde al inicio', eur: 5 },
-    { id: 's2', concepto: 'Ver a tu pareja durante el recorrido', eur: 5 },
-    { id: 's3', concepto: 'Irte antes de tiempo', eur: 5 },
-    { id: 's4', concepto: 'Sin jersey navideño', eur: 3 },
-    { id: 's5', concepto: 'Sin pantalón beige o blanco', eur: 3 },
-    { id: 's6', concepto: 'Sin camisa debajo', eur: 2 },
-    { id: 's7', concepto: 'Atuendo incompleto en la cena', eur: 0, extra: '2 chupitos' },
-    { id: 's8', concepto: 'Bingo falso', eur: 2 }
-  ],
-
   // Los 22 jugadores incluyen al admin: tiene cartón como el resto, más funciones especiales.
   ADMIN: 'Adri',
   JUGADORES: ['Dani', 'Marcos', 'Raúl', 'Javi', 'Nacho', 'Pablo', 'Sergio', 'Álvaro', 'Iván', 'Rubén', 'Fer',

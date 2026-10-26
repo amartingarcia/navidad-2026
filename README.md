@@ -18,10 +18,10 @@ También funciona abriendo `index.html` directamente.
 - Pantalla de entrada con enlace personal (`#/entrar/<token>`): usuario, contraseña provisional y cambio obligatorio.
 - Cartón 3x3 con la casilla central fija (manteo a Maritsu) y 8 retos por jugador, repartidos de forma determinista.
 - Subida de foto por reto (cámara del móvil), con compresión en el cliente.
-- Admin: es un jugador más (tiene cartón) con funciones especiales: sorteo del jurado, multas y enlaces personales.
+- Admin: es un jugador más (tiene cartón) con funciones especiales: sorteo del jurado y enlaces personales.
 - Jurado: 2 jugadores al azar más el admin (3 en total). Los elegidos ven un banner en su cartón y una pestaña «Jurado» para validar fotos y cantos de línea y bingo de los demás (nunca los suyos).
 - Instalable en el móvil (manifest + iconos): «Añadir a pantalla de inicio» en Safari o Chrome.
-- Muro de fotos validadas, y panel de admin (sorteo, multas y enlaces).
+- Muro de fotos validadas, y panel de admin (sorteo del jurado y enlaces).
 
 ## Lo que no hace todavía
 
@@ -35,4 +35,4 @@ El workflow `.github/workflows/pages.yml` publica la raíz del repo en cada push
 
 ## Datos de ejemplo
 
-Edita `data.js` (retos, multas y jugadores). Botón «Reiniciar datos de ejemplo» en la pantalla de entrada para restaurar el estado.
+Edita `data.js` (retos y jugadores). Botón «Reiniciar datos de ejemplo» en la pantalla de entrada para restaurar el estado.
