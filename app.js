@@ -65,7 +65,7 @@
         user: n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       };
     });
-    var s = { session: null, players: jugadores, photos: [], fines: [], claims: [], ganadores: { linea: null, bingo: null } };
+    var s = { session: null, players: jugadores, photos: [], fines: [], claims: [], ganadores: { linea: null, bingo: null }, jurado: sortear(jugadores) };
     var colores = ['#1E6B4A', '#D4283C', '#18304F', '#8a5a00', '#5b2a86'];
     function foto(pid, rid, estado, min) {
       s.photos.push({ id: pid + '-' + rid + '-' + min, playerId: pid, retoId: rid, status: estado,
@@ -89,9 +89,17 @@
   function cargar() {
     try {
       var raw = localStorage.getItem(KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (!s.jurado) s.jurado = sortear(s.players); // datos guardados antes de existir el jurado
+        return s;
+      }
     } catch (e) { /* sin almacenamiento: sigue en memoria */ }
     return semilla();
+  }
+  // Jurado: 3 jugadores al azar (el admin es el cuarto miembro, fijo).
+  function sortear(jugadores) {
+    return mezclar(jugadores.map(function (p) { return p.id; }), Math.random).slice(0, 3);
   }
   function guardar() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -126,6 +134,23 @@
   function jugador(id) { return state.players.filter(function (p) { return p.id === id; })[0]; }
   function yo() { return state.session && state.session.role === 'jugador' ? jugador(state.session.playerId) : null; }
   function soyAdmin() { return state.session && state.session.role === 'admin'; }
+  function esJurado(pid) { return state.jurado.indexOf(pid) !== -1; }
+  function soyJurado() { var p = yo(); return !!p && esJurado(p.id); }
+  function pendientes(excluirPid) {
+    return state.photos.filter(function (f) { return f.status === 'pend' && f.playerId !== excluirPid; })
+      .sort(function (a, b) { return a.ts - b.ts; });
+  }
+  function listaPendientes(excluirPid) {
+    var pend = pendientes(excluirPid);
+    if (!pend.length) return '<div class="vacio">No hay fotos por validar. Descansa un rato.</div>';
+    return '<div class="muro">' + pend.map(function (f) {
+      var r = reto(f.retoId);
+      return '<figure class="foto-card"><img src="' + f.img + '" alt="' + esc(r.titulo) + '">' +
+        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small></figcaption>' +
+        '<div class="acc"><button class="btn mini" data-acc="aprobar" data-id="' + esc(f.id) + '">Validar</button>' +
+        '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div></figure>';
+    }).join('') + '</div>';
+  }
   function boteTotal() { return state.fines.reduce(function (a, f) { return a + f.eur; }, 0); }
   function dias() {
     var d = Math.ceil((new Date(N.EVENTO.fecha + 'T00:00:00') - new Date()) / 86400000);
@@ -144,6 +169,7 @@
   function nav(ruta) {
     var items = [['carton', '🎟️', 'Cartón'], ['muro', '📸', 'Muro'], ['bote', '💶', 'Bote']];
     if (soyAdmin()) items = [['admin', '🛠️', 'Admin'], ['muro', '📸', 'Muro'], ['bote', '💶', 'Bote']];
+    else if (soyJurado()) items.splice(1, 0, ['jurado', '⚖️', 'Jurado']);
     return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + items.map(function (it) {
       return '<a href="#/' + it[0] + '"' + (ruta === it[0] ? ' aria-current="page"' : '') + '><span aria-hidden="true">' + it[1] + '</span>' + it[2] + '</a>';
     }).join('') + '<a href="#/salir" data-acc="salir"><span aria-hidden="true">🚪</span>Salir</a></div></nav>';
@@ -171,6 +197,7 @@
     }
     h += '<section class="panel"><h3>Probar la PoC</h3><p>Sin backend: los datos son de ejemplo y se guardan solo en este navegador.</p>' +
       '<div class="acciones"><button class="btn oro" data-acc="demoJugador">Entrar como Dani (jugador)</button>' +
+      '<button class="btn fantasma" data-acc="demoJurado">Entrar como jurado (' + esc(jugador(state.jurado[0]).name) + ')</button>' +
       '<button class="btn fantasma" data-acc="demoAdmin">Entrar como admin</button>' +
       '<button class="btn fantasma" data-acc="reiniciar">Reiniciar datos de ejemplo</button></div></section></main>';
     return h;
@@ -186,7 +213,13 @@
 
   function vCarton() {
     var p = yo(), c = carton(p.id), n = sellos(p.id), lineas = lineasCompletas(p.id);
-    var h = banner();
+    var h = '';
+    if (esJurado(p.id)) {
+      var np = pendientes(p.id).length;
+      h += '<a class="banner-jurado" href="#/jurado"><span class="ico" aria-hidden="true">⚖️</span><span><b>Te ha tocado jurado</b><br>' +
+        (np ? np + (np === 1 ? ' foto espera' : ' fotos esperan') + ' tu veredicto' : 'No hay fotos por validar ahora mismo') + '</span></a>';
+    }
+    h += banner();
     h += '<article class="ticket"><div class="ticket-top"><div><h2>Cartón de ' + esc(p.name) + '</h2><small>Quedada de Navidad · 26 dic 2026</small></div>' +
       '<div class="serie" aria-label="Número de cartón">Nº ' + String(p.id).padStart(3, '0') + '</div></div><div class="perf"></div>' +
       '<div class="progreso"><span>' + n + ' de 9 sellos validados</span><span>Pulsa un reto para subir la foto</span></div><div class="grid">';
@@ -224,7 +257,7 @@
     return '<div class="muro">' + oks.map(function (f) {
       var r = reto(f.retoId);
       return '<figure class="foto-card"><img src="' + f.img + '" alt="' + esc(r.titulo) + '" loading="lazy">' +
-        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + '</figcaption></figure>';
+        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + (f.por ? '<br><small>Validada por ' + esc(f.por) + '</small>' : '') + '</figcaption></figure>';
     }).join('') + '</div>';
   }
 
@@ -243,22 +276,26 @@
     return h + '</section>';
   }
 
+  function vJurado() {
+    var p = yo();
+    return '<section class="panel"><h2>Eres del jurado</h2><p>Valida las fotos de tus colegas. Las tuyas las valida otra persona del jurado o el admin. Si dudas, rechaza y que la repitan.</p></section>' +
+      listaPendientes(p.id);
+  }
+
   function vAdmin() {
-    var tabs = [['pend', 'Fotos'], ['cantos', 'Cantos'], ['multas', 'Multas'], ['enlaces', 'Enlaces']];
+    var tabs = [['pend', 'Fotos'], ['cantos', 'Cantos'], ['jurado', 'Jurado'], ['multas', 'Multas'], ['enlaces', 'Enlaces']];
     var h = '<div class="segmento" role="group" aria-label="Secciones del admin">' + tabs.map(function (t) {
       return '<button data-acc="tab" data-tab="' + t[0] + '" aria-pressed="' + (adminTab === t[0]) + '">' + t[1] + '</button>';
     }).join('') + '</div>';
 
-    if (adminTab === 'pend') {
-      var pend = state.photos.filter(function (f) { return f.status === 'pend'; }).sort(function (a, b) { return a.ts - b.ts; });
-      if (!pend.length) return h + '<div class="vacio">No hay fotos por validar. Descansa un rato.</div>';
-      h += '<div class="muro">' + pend.map(function (f) {
-        var r = reto(f.retoId);
-        return '<figure class="foto-card"><img src="' + f.img + '" alt="' + esc(r.titulo) + '">' +
-          '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small></figcaption>' +
-          '<div class="acc"><button class="btn mini" data-acc="aprobar" data-id="' + esc(f.id) + '">Validar</button>' +
-          '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div></figure>';
-      }).join('') + '</div>';
+    if (adminTab === 'pend') h += listaPendientes(null);
+
+    if (adminTab === 'jurado') {
+      h += '<section class="panel"><h3>Jurado de la quedada</h3><p>Tres jugadores al azar, más tú como administrador. Ven un banner en su cartón y pueden validar las fotos de los demás (nunca las suyas).</p>' +
+        state.jurado.map(function (id) {
+          return '<div class="fila"><div><b>' + esc(jugador(id).name) + '</b><small>Jurado</small></div><span class="etq ok">En el jurado</span></div>';
+        }).join('') + '<div class="fila"><div><b>Admin</b><small>Siempre en el jurado</small></div><span class="etq ok">En el jurado</span></div>' +
+        '<button class="btn oro ancho" style="margin-top:12px" data-acc="sortear">Sortear de nuevo</button></section>';
     }
 
     if (adminTab === 'cantos') {
@@ -310,7 +347,8 @@
     var nombre = r.nombre;
     if (soyAdmin() && (nombre === '' || nombre === 'carton')) nombre = 'admin';
     if (!soyAdmin() && (nombre === '' || nombre === 'admin')) nombre = 'carton';
-    var vistas = { carton: vCarton, muro: vMuro, bote: vBote, admin: vAdmin };
+    if (nombre === 'jurado' && !soyJurado()) nombre = 'carton';
+    var vistas = { carton: vCarton, muro: vMuro, bote: vBote, admin: vAdmin, jurado: vJurado };
     html = cabecera() + (vistas[nombre] || vCarton)() + nav(nombre);
     $app.innerHTML = html;
     window.scrollTo(0, 0);
@@ -370,6 +408,8 @@
     },
     aprobar: function (d) { cambiarFoto(d.id, 'ok'); toast('Foto validada.'); },
     rechazar: function (d) { cambiarFoto(d.id, 'ko'); toast('Foto rechazada.'); },
+    sortear: function () { state.jurado = sortear(state.players); guardar(); render(); toast('Jurado nuevo sorteado.'); },
+    demoJurado: function () { state.session = { role: 'jugador', playerId: state.jurado[0] }; guardar(); location.hash = '#/carton'; render(); },
     resolver: function (d) {
       var c = state.claims.filter(function (x) { return x.id === d.id; })[0];
       if (d.ok === '1') {
@@ -394,7 +434,8 @@
     salir: function () { /* lo resuelve el router */ }
   };
   function cambiarFoto(id, estado) {
-    state.photos.forEach(function (f) { if (f.id === id) f.status = estado; });
+    var quien = soyAdmin() ? 'Admin' : (yo() ? yo().name : '');
+    state.photos.forEach(function (f) { if (f.id === id) { f.status = estado; f.por = quien; } });
     guardar(); render();
   }
 
