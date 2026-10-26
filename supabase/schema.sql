@@ -280,6 +280,12 @@ grant select on public.jugadores, public.retos, public.cartones, public.jurado,
 grant insert, delete on public.fotos to authenticated;
 grant insert, delete on public.reacciones to authenticated;
 
+-- The server-side role (service_role, used by supabase/seed-users.sh) needs explicit grants too:
+-- newer Supabase projects no longer grant privileges on new tables automatically.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
 revoke all on function public.nombre_por_token(text) from public;
 grant execute on function public.nombre_por_token(text) to anon, authenticated;
 revoke all on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
@@ -288,6 +294,7 @@ revoke all on function public.pass_cambiada(), public.valorar(uuid, boolean), pu
 grant execute on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
                           public.repartir_cartones(boolean), public.puede_cantar(text, int),
                           public.es_admin(), public.es_jurado(), public.resetear_pass(uuid) to authenticated;
+grant execute on all functions in schema public to service_role;
 
 drop policy if exists jugadores_leer on public.jugadores;
 create policy jugadores_leer on public.jugadores for select to authenticated using (true);
