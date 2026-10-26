@@ -17,7 +17,7 @@ Frontend estático (HTML, CSS y JS sin build) sobre Supabase (Auth, Postgres con
 - Cartón 3x3 fijo por jugador: casilla central «Manteo a Maritsu» y 8 retos al azar del pool (`supabase/retos.sql`, tabla `retos`).
 - Solo cuentan las **filas horizontales**. Las fotos se aceptan al subirlas y se pueden repetir (la nueva sustituye a la anterior).
 - **Cantos:** «¡Cantar línea!» y «¡Cantar bingo!» no llevan foto. El jurado (2 jugadores al azar + el admin) revisa las fotos del jugador y vota; se necesitan **2 de 3** a favor. Nadie vota su propio canto. Hay **1 premio de línea y 1 de bingo** (premios por determinar, columna `premios.premio`). Solo el jurado valora la foto del pibón de la noche.
-- **Retos premium** (p. ej. el Bizum de Goria): están fuera del cartón, cualquiera puede intentarlos y gana quien primero consiga que el jurado (2 de 3) valide su prueba. Cada uno tiene su premio. Se marcan en `supabase/retos.sql`.
+- **Retos premium** (por definir): están fuera del cartón, cualquiera puede intentarlos y gana quien primero consiga que el jurado (2 de 3) valide su prueba. Cada uno tiene su premio. Se marcan en `supabase/retos.sql`.
 - La pestaña **Premios** muestra el podio (línea, bingo y cada reto premium) con el nombre de quien se lo lleva; el admin define el texto de cada premio en Admin → Premios.
 - Cada reto puede tener una hora mínima de valoración (`retos.desde`; el pibón de la noche, el 27 dic 12:00). La comprueba el servidor.
 - Muro común con todas las fotos y reacciones ❤️ 😂 🍆 🔥 👍 🖕 🚀.

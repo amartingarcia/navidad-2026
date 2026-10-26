@@ -1,4 +1,4 @@
--- NPGingo · challenge pool (ids 1-31). Run in the Supabase SQL Editor AFTER schema.sql and BEFORE dealing the cards.
+-- NPGingo · challenge pool (ids 1-30). Run in the Supabase SQL Editor AFTER schema.sql and BEFORE dealing the cards.
 -- Idempotent: re-running updates the texts of existing ids. Edit or delete lines freely before running.
 -- `desde` (valuation time) is null = no waiting; the "pibón" is only ruled on from 27 Dec 12:00.
 -- `hasta` (deadline): every challenge closes at 08:00 on 27 Dec; the Jäger one earlier, at 18:00 on 26 Dec.
@@ -35,16 +35,20 @@ insert into public.retos (id, icono, titulo, franja, tipo, fijo, pista, desde, h
  ('27','🕺','Peor baile del día','Noche','jurado',false,'Foto o vídeo corto del baile. Decide el jurado.',null,timestamptz '2026-12-27 08:00:00+01'),
  ('28','🧦','Algo navideño que lleves puesto, a la vista','Cualquiera','individual',false,'Calcetines, gorro, jersey feo o lo que lleves. Foto enseñándolo con orgullo.',null,timestamptz '2026-12-27 08:00:00+01'),
  ('29','🎁','Regalo exprés a alguien del grupo','Ruta','individual',false,'Invita a una tapa o a un chupito a alguien del grupo. Foto del momento de dárselo.',null,timestamptz '2026-12-27 08:00:00+01'),
- ('30','🌙','Foto de los últimos en pie','Cierre','grupal',false,'Mínimo 5 personas del grupo, de madrugada y sin una sola cara seria. Vale una sola para todos.',null,timestamptz '2026-12-27 08:00:00+01'),
- ('31','💸','Bizum de Goria de 500 €','Cualquiera','individual',false,'Captura de pantalla del Bizum de 500 € recibido de Goria.',null,timestamptz '2026-12-27 08:00:00+01')
+ ('30','🌙','Foto de los últimos en pie','Cierre','grupal',false,'Mínimo 5 personas del grupo, de madrugada y sin una sola cara seria. Vale una sola para todos.',null,timestamptz '2026-12-27 08:00:00+01')
 on conflict (id) do update set
   icono = excluded.icono, titulo = excluded.titulo, franja = excluded.franja, tipo = excluded.tipo,
   fijo = excluded.fijo, pista = excluded.pista, desde = excluded.desde, hasta = excluded.hasta;
 
 -- Premium challenges: outside the cards, anyone can try them; the first one the jury approves (2 of 3) wins.
--- Add ids here to make more. Each one gets its own prize line (editable from Admin > Premios).
-update public.retos set premium = (id in ('31'));
+-- None defined yet. To create one: add its row above (id 31, 32...) and list its id in the array below;
+-- it then gets its own prize line (editable from Admin > Premios) and shows up in the Premios tab.
+update public.retos set premium = (id = any (array[]::text[]));
 insert into public.premios (tipo, reto, puesto)
   select 'premium', id, 1 from public.retos where premium
   on conflict (tipo, reto, puesto) do nothing;
 delete from public.premios where tipo = 'premium' and reto not in (select id from public.retos where premium);
+
+-- Cleanup: the "Bizum de Goria" test challenge (31) was dropped.
+delete from public.fotos where reto = '31';
+delete from public.retos where id = '31';
