@@ -59,21 +59,41 @@
     '<path d="M26 27 q3 -3 6 0 M40 27 q3 -3 6 0" stroke="#13233B" stroke-width="1.7" fill="none" stroke-linecap="round"/>' +
     '<path d="M21 24 Q22 5 44 5 Q56 7 58 20 Q40 13 21 24 Z" fill="#D4283C"/>' +
     '<rect x="19" y="19.5" width="36" height="8" rx="4" fill="#F4F7FB"/><circle cx="58" cy="20" r="5.4" fill="#F4F7FB"/></svg>';
+  var FRASES_MAMA = ['¿Me invitas a un Jäger?', '¡Sujétame el cubata, guapo!', '¡Ese gorro te sienta de lujo!', '¿Bailamos?', '¡hip!', '¡otra ronda!', '¡Yo con el de la barra!', '¡Qué calor hace aquí!', '¡Mira, pero no toques!'];
+  var MAMA = '<svg viewBox="0 0 74 104" width="64" height="90" focusable="false">' +
+    '<ellipse cx="26" cy="99" rx="8" ry="4" fill="#2b1a14"/><ellipse cx="47" cy="99" rx="8" ry="4" fill="#2b1a14"/>' +
+    '<path d="M24 47 Q36 41 48 47 L62 91 Q36 99 10 91 Z" fill="#D4283C"/>' +
+    '<path d="M10 88 Q36 97 62 88 L63 94 Q36 102 9 94 Z" fill="#F4F7FB"/>' +
+    '<rect x="25" y="60" width="22" height="5" fill="#13233B"/><rect x="33" y="58.6" width="6" height="7.8" rx="1.5" fill="#F4B93E"/>' +
+    '<path d="M48 51 Q64 49 64 62" stroke="#D4283C" stroke-width="8" fill="none" stroke-linecap="round"/>' +
+    '<circle cx="65" cy="63" r="4.4" fill="#f1c9a5"/>' +
+    '<path d="M66 62 L66 54 M62 54 L70 54" stroke="#dce7f5" stroke-width="1.6" stroke-linecap="round"/>' +
+    '<path d="M58.5 38 L73.5 38 L66 51.5 Z" fill="#7fe7ff" stroke="#dce7f5" stroke-width="1.2" stroke-linejoin="round"/>' +
+    '<circle cx="68.5" cy="41.5" r="2.2" fill="#1E6B4A"/>' +
+    '<ellipse cx="36" cy="29" rx="17" ry="16" fill="#c8662b"/><circle cx="52" cy="35" r="5" fill="#c8662b"/><circle cx="20" cy="35" r="5" fill="#c8662b"/>' +
+    '<circle cx="36" cy="31" r="13" fill="#f1c9a5"/>' +
+    '<circle cx="28" cy="35" r="3.4" fill="#f08a8a" opacity=".85"/><circle cx="44" cy="35" r="3.4" fill="#f08a8a" opacity=".85"/>' +
+    '<path d="M27 28 q3 -3 6 0 M39 28 q3 -3 6 0" stroke="#13233B" stroke-width="1.6" fill="none" stroke-linecap="round"/>' +
+    '<path d="M26 25.5 l-2 -2 M44.5 25.5 l2 -2" stroke="#13233B" stroke-width="1.2" stroke-linecap="round"/>' +
+    '<path d="M31.5 38.5 Q36 43 40.5 38.5 Q36 41 31.5 38.5 Z" fill="#c0283c" stroke="#c0283c" stroke-width="1.6" stroke-linejoin="round"/>' +
+    '<path d="M21 23 Q22 5 44 5 Q56 7 58 20 Q40 13 21 23 Z" fill="#D4283C"/>' +
+    '<rect x="19" y="18.5" width="36" height="8" rx="4" fill="#F4F7FB"/><circle cx="58" cy="19" r="5.4" fill="#F4F7FB"/></svg>';
   var cicloTimer = 0;
-  function frase() { return FRASES[Math.floor(Math.random() * FRASES.length)]; }
-  function nuevoSanta(retardo) {
+  function frase(mama) { var l = mama ? FRASES_MAMA : FRASES; return l[Math.floor(Math.random() * l.length)]; }
+  // mama: true/false para forzarlo; sin indicar, una de cada tres o cuatro es Mamá Noel.
+  function nuevoSanta(retardo, mama) {
     setTimeout(function () {
       if (document.querySelectorAll('.santa').length >= 5) return;
-      var dur = 13 + Math.random() * 9, esc = .8 + Math.random() * .45;
-      var sa = el('div', '', 'santa paseando' + (Math.random() < .5 ? '' : ' izq'), '<span class="dice"></span><span class="cuerpo">' + SANTA + '</span>');
+      var dur = 13 + Math.random() * 9, esc = .8 + Math.random() * .45, esMama = mama === undefined ? Math.random() < .4 : mama;
+      var sa = el('div', '', 'santa paseando' + (esMama ? ' mama' : '') + (Math.random() < .5 ? '' : ' izq'), '<span class="dice"></span><span class="cuerpo">' + (esMama ? MAMA : SANTA) + '</span>');
       sa.style.setProperty('--dur', dur.toFixed(1) + 's');
       sa.style.setProperty('--esc', esc.toFixed(2));
       sa.style.bottom = 'calc(' + Math.round(78 + Math.random() * 46) + 'px + env(safe-area-inset-bottom))';
-      sa.querySelector('.dice').textContent = frase();
+      sa.querySelector('.dice').textContent = frase(esMama);
       sa.setAttribute('aria-hidden', 'true');
       sa.addEventListener('animationend', function (e) { if (e.animationName === 'paseo' || e.animationName === 'paseo-izq') { clearTimeout(sa.eructoT); sa.remove(); } });
       document.body.appendChild(sa);
-      sa.eructoT = setTimeout(eructo, dur * 1000 * .3); // justo cuando le sale el bocadillo (se cancela si lo explotan)
+      if (!esMama) sa.eructoT = setTimeout(eructo, dur * 1000 * .3); // justo cuando le sale el bocadillo (se cancela si lo explotan)
     }, retardo);
   }
   // Cada cierto rato salen entre 1 y 3 Papás Noel (más y más seguidos en modo discoteca).
@@ -108,46 +128,57 @@
     var c = contexto();
     if (!c) return;
     try { var s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); } catch (e) { /* da igual */ }
-    cargarEructo();
+    cargarSonidos();
   }
-  // Eructo real (sonidos/eructo.mp3, BigSoundBank, CC0). Se descarga y decodifica tras el primer toque.
-  var bufEructo = null, cargandoEructo = false, ultimoEructo = 0;
-  function cargarEructo() {
+  // Sonidos reales en sonidos/*.mp3 (el eructo es de BigSoundBank, CC0). Se descargan y decodifican tras el primer toque;
+  // si falta un archivo, ese sonido simplemente no suena.
+  // Para activar el gemido de Mamá Noel: añadir sonidos/gemido.mp3 y la entrada  gemido: { buf: null, cargando: false, vol: .8 }  aquí.
+  var SONIDOS = { eructo: { buf: null, cargando: false, vol: .8 } };
+  var ultimoEructo = 0;
+  function cargarSonidos() {
     var c = ac;
-    if (bufEructo || cargandoEructo || !c || !window.fetch) return;
-    cargandoEructo = true;
-    fetch('sonidos/eructo.mp3').then(function (r) { return r.arrayBuffer(); })
-      .then(function (b) { return new Promise(function (ok, ko) { c.decodeAudioData(b, ok, ko); }); })
-      .then(function (b) { bufEructo = b; }, function () { cargandoEructo = false; });
+    if (!c || !window.fetch) return;
+    Object.keys(SONIDOS).forEach(function (n) {
+      var d = SONIDOS[n];
+      if (d.buf || d.cargando) return;
+      d.cargando = true;
+      fetch('sonidos/' + n + '.mp3').then(function (r) { if (!r.ok) throw new Error('falta'); return r.arrayBuffer(); })
+        .then(function (b) { return new Promise(function (ok, ko) { c.decodeAudioData(b, ok, ko); }); })
+        .then(function (b) { d.buf = b; }, function () { /* sin archivo: sin sonido */ });
+    });
   }
-  // Nunca suenan dos a la vez: el automático se salta si ya hay uno sonando y el de la explosión corta el anterior.
+  // Nunca suenan dos a la vez: el automático se salta si ya hay uno sonando y el de una explosión corta el anterior.
   var sonando = null;
-  function eructo(forzar) {
+  function sonar(nombre, forzar) {
     if (!forzar && (!puedeSonar() || sonando || Date.now() - ultimoEructo < 2500)) return;
-    var c = contexto();
-    if (!c) return;
-    if (!bufEructo) { cargarEructo(); return; }
+    var c = contexto(), d = SONIDOS[nombre];
+    if (!c || !d) return;
+    if (!d.buf) { cargarSonidos(); return; }
     ultimoEructo = Date.now();
     try {
       if (sonando) { try { sonando.stop(); } catch (e) { /* ya parado */ } }
       var s = c.createBufferSource(), g = c.createGain();
-      s.buffer = bufEructo; g.gain.value = .8;
+      s.buffer = d.buf; g.gain.value = d.vol;
       s.connect(g); g.connect(c.destination);
       s.onended = function () { if (sonando === s) sonando = null; };
       sonando = s; s.start(0);
     } catch (e) { sonando = null; }
   }
+  function eructo(forzar) { sonar('eructo', forzar); }
   ['pointerdown', 'touchend', 'click', 'keydown'].forEach(function (ev) {
     document.addEventListener(ev, function f() { desbloquear(); document.removeEventListener(ev, f, true); }, true);
   });
   // Tocar a un Papá Noel lo hace explotar entre tacos.
   var TACOS = ['¡Hijo de puta!', '¡Cabrón!', '¡Guarro!'];
+  var GEMIDOS = ['¡Ay!', '¡Ooh!', '¡Aaah!'];
   var PIEZAS = ['🎅', '🥃', '🍾', '⭐', '🍺', '🧦', '🎄', '💥'];
-  function explotar(x, y) {
-    var caja = el('div', '', 'pum', '<span class="boom" aria-hidden="true">💥</span><span class="taco" role="status">' + TACOS[Math.floor(Math.random() * TACOS.length)] + '</span>');
+  var PIEZAS_MAMA = ['💋', '❤️', '🍸', '💄', '👠', '🎀', '⭐', '💥'];
+  function explotar(x, y, mama) {
+    var dichos = mama ? GEMIDOS : TACOS, trozos = mama ? PIEZAS_MAMA : PIEZAS;
+    var caja = el('div', '', 'pum', '<span class="boom" aria-hidden="true">' + (mama ? '💖' : '💥') + '</span><span class="taco' + (mama ? ' gime' : '') + '" role="status">' + dichos[Math.floor(Math.random() * dichos.length)] + '</span>');
     caja.style.left = x + 'px'; caja.style.top = y + 'px';
     for (var i = 0; i < 14; i++) {
-      var a = Math.random() * 6.283, r = 70 + Math.random() * 110, p = el('span', '', 'trozo', PIEZAS[i % PIEZAS.length]);
+      var a = Math.random() * 6.283, r = 70 + Math.random() * 110, p = el('span', '', 'trozo', trozos[i % trozos.length]);
       p.style.setProperty('--dx', Math.round(Math.cos(a) * r) + 'px');
       p.style.setProperty('--dy', Math.round(Math.sin(a) * r - 40) + 'px');
       p.style.setProperty('--rot', Math.round((Math.random() - .5) * 720) + 'deg');
@@ -155,16 +186,16 @@
     }
     document.body.appendChild(caja);
     setTimeout(function () { caja.remove(); }, 1900);
-    eructo(true);
+    sonar(mama ? 'gemido' : 'eructo', true);
     try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* sin vibración */ }
   }
   document.addEventListener('click', function (e) {
     var sa = e.target.closest && e.target.closest('.santa');
     if (!sa) return;
     clearTimeout(sa.eructoT);
-    var r = sa.getBoundingClientRect();
+    var r = sa.getBoundingClientRect(), mama = sa.classList.contains('mama');
     sa.remove();
-    explotar(r.left + r.width / 2, r.top + r.height / 2);
+    explotar(r.left + r.width / 2, r.top + r.height / 2, mama);
   });
 
   /* ---------- premio gordo ---------- */
@@ -234,5 +265,5 @@
     setTimeout(function () { if (document.getElementById('gordo') === g) cerrar(); }, 11000);
   }
 
-  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar, eructo: eructo };
+  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar, eructo: eructo, nuevo: nuevoSanta };
 })();

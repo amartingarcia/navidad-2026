@@ -320,3 +320,5 @@ body.disco .lema::before { content: "🪩 "; }
 @keyframes vuela { to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
 @keyframes taco { 0% { transform: translateX(-50%) scale(.3); opacity: 0; } 12% { transform: translateX(-50%) scale(1.2); opacity: 1; } 22% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { transform: translateX(-50%) translateY(-24px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .pum .trozo, .pum .boom { animation: none; opacity: 0; } }
+
+.pum .taco.gime { background: #ff3ea5; box-shadow: 0 4px 0 #b21f72; }
