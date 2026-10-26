@@ -73,7 +73,6 @@
       sa.setAttribute('aria-hidden', 'true');
       sa.addEventListener('animationend', function (e) { if (e.animationName === 'paseo' || e.animationName === 'paseo-izq') sa.remove(); });
       document.body.appendChild(sa);
-      setTimeout(eructo, dur * 1000 * .3); // justo cuando le sale el bocadillo
     }, retardo);
   }
   // Cada cierto rato salen entre 1 y 3 Papás Noel (más y más seguidos en modo discoteca).
@@ -90,7 +89,7 @@
     }, 3000);
   }
 
-  /* ---------- sonido: eructos y sirena (siempre activo; no hay botón para silenciarlo) ---------- */
+  /* ---------- sonido: solo la sirena del premio gordo (siempre activo; no hay botón para silenciarlo) ---------- */
   var ac = null, ultimoEructo = 0;
   // El navegador solo deja sonar después de que la persona haya tocado la pantalla alguna vez.
   function puedeSonar() { return !navigator.userActivation || navigator.userActivation.hasBeenActive; }
@@ -112,53 +111,9 @@
   ['pointerdown', 'touchend', 'click', 'keydown'].forEach(function (ev) {
     document.addEventListener(ev, function f() { desbloquear(); document.removeEventListener(ev, f, true); }, true);
   });
-  // Eructo sintetizado: zumbido que baja de tono, con temblor y aire. Los altavoces de los móviles no reproducen
-  // graves, así que se apoya en los armónicos del diente de sierra. Para afinarlo: TONO (Hz de arranque; más alto = más agudo),
-  // VOLUMEN (0 a 1) y BRILLO (Hz del filtro; más bajo = más sordo y «cavernoso»).
-  var ERUCTO = { TONO: 125, VOLUMEN: .42, BRILLO: 1100 };
-  function eructo(forzar) {
-    if (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500)) return;
-    var c = contexto();
-    if (!c) return;
-    ultimoEructo = Date.now();
-    var t = c.currentTime, d = .7 + Math.random() * .8, f0 = ERUCTO.TONO + Math.random() * 30;
-    var o = c.createOscillator(); o.type = 'sawtooth';
-    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * .5, t + d);
-    var o2 = c.createOscillator(); o2.type = 'sawtooth'; o2.detune.value = 18;   // segunda voz algo desafinada: más «gorda»
-    o2.frequency.setValueAtTime(f0, t); o2.frequency.exponentialRampToValueAtTime(f0 * .5, t + d);
-    var lfo = c.createOscillator(); lfo.frequency.value = 20 + Math.random() * 12;
-    var lg = c.createGain(); lg.gain.value = .45; lfo.connect(lg);
-    var am = c.createGain(); am.gain.value = .55; lg.connect(am.gain);
-    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 4;
-    f.frequency.setValueAtTime(ERUCTO.BRILLO, t); f.frequency.exponentialRampToValueAtTime(ERUCTO.BRILLO * .25, t + d);
-    var out = c.createGain();
-    out.gain.setValueAtTime(.0001, t); out.gain.exponentialRampToValueAtTime(ERUCTO.VOLUMEN, t + .08);
-    out.gain.setValueAtTime(ERUCTO.VOLUMEN, t + d * .65); out.gain.exponentialRampToValueAtTime(.0001, t + d);
-    var buf = c.createBuffer(1, Math.ceil(c.sampleRate * d), c.sampleRate), datos = buf.getChannelData(0);
-    for (var i = 0; i < datos.length; i++) datos[i] = Math.random() * 2 - 1;
-    var ruido = c.createBufferSource(); ruido.buffer = buf;
-    var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 450; bp.Q.value = .8;
-    var rg = c.createGain(); rg.gain.value = .3;
-    ruido.connect(bp); bp.connect(rg); rg.connect(out);
-    var mezcla = c.createGain(); mezcla.gain.value = .7; o2.connect(mezcla); mezcla.connect(am);
-    o.connect(am); am.connect(f); f.connect(out); out.connect(c.destination);
-    o.start(t); o2.start(t); lfo.start(t); ruido.start(t);
-    o.stop(t + d + .05); o2.stop(t + d + .05); lfo.stop(t + d + .05); ruido.stop(t + d + .05);
-  }
-
   // Tocar a un Papá Noel lo hace explotar entre tacos.
   var TACOS = ['¡Hijo de puta!', '¡Cabrón!', '¡Guarro!'];
   var PIEZAS = ['🎅', '🥃', '🍾', '⭐', '🍺', '🧦', '🎄', '💥'];
-  function pum() {
-    var c = contexto();
-    if (!c) return;
-    var t = c.currentTime, d = .35, buf = c.createBuffer(1, Math.ceil(c.sampleRate * d), c.sampleRate), x = buf.getChannelData(0);
-    for (var i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / x.length, 3);
-    var s = c.createBufferSource(); s.buffer = buf;
-    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1200;
-    var g = c.createGain(); g.gain.value = .5;
-    s.connect(f); f.connect(g); g.connect(c.destination); s.start(t);
-  }
   function explotar(x, y) {
     var caja = el('div', '', 'pum', '<span class="boom" aria-hidden="true">💥</span><span class="taco" role="status">' + TACOS[Math.floor(Math.random() * TACOS.length)] + '</span>');
     caja.style.left = x + 'px'; caja.style.top = y + 'px';
@@ -171,8 +126,6 @@
     }
     document.body.appendChild(caja);
     setTimeout(function () { caja.remove(); }, 1900);
-    pum();
-    setTimeout(function () { eructo(true); }, 140);
     try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* sin vibración */ }
   }
   document.addEventListener('click', function (e) {
@@ -250,5 +203,5 @@
     setTimeout(function () { if (document.getElementById('gordo') === g) cerrar(); }, 11000);
   }
 
-  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar, eructo: eructo };
+  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar };
 })();
