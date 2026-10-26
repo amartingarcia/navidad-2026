@@ -128,7 +128,7 @@
     return {
       icono: r ? r.icono : g.tipo === 'bingo' ? '🏆' : ['🥇', '🥈', '🥉'][g.puesto - 1] || '🎖️',
       titulo: g.tipo === 'bingo' ? '¡BINGO!' : g.tipo === 'linea' ? '¡LÍNEA!' : esc(r.titulo.toUpperCase()),
-      sub: g.tipo === 'linea' ? g.puesto + 'ª línea' : g.tipo === 'bingo' ? 'Bingo' : 'Reto premium',
+      sub: g.tipo === 'linea' ? nombreLinea(g.puesto) : g.tipo === 'bingo' ? 'Bingo' : 'Reto premium',
       nombre: esc(jugador(g.playerId).name), premio: pr && pr.premio ? esc(pr.premio) : ''
     };
   }
@@ -252,7 +252,7 @@
       ? '<strong>' + d + '</strong><span>días para el 26 de diciembre</span>'
       : '<strong>¡Hoy!</strong><span>Empieza la ruta</span>';
     return '<header class="cab"><div>' + logo() + '<p class="lema">No preguntes, gilipollas</p></div>' +
-      '<div class="cuenta">' + cuenta + '</div></header>';
+      '<div class="cuenta">' + cuenta + '<button class="snd" data-acc="sonido" aria-pressed="' + window.NPGFIESTA.sonidoOn() + '" aria-label="Sonido (eructos y sirena)">' + (window.NPGFIESTA.sonidoOn() ? '🔊' : '🔇') + '</button></div></header>';
   }
   function nav(ruta) {
     var items = [['carton', '🎟️', 'Cartón'], ['premios', '🏆', 'Premios'], ['muro', '📸', 'Muro']];
@@ -299,8 +299,10 @@
   function vCargando() { return entrada('<section class="panel"><p>Cargando…</p></section>'); }
 
   /* ----- juego ----- */
-  // Podio: una fila por premio (1ª, 2ª y 3ª línea, bingo, retos premium) con el ganador cuando ya lo hay.
+  // Podio: una fila por premio (línea, bingo, retos premium) con el ganador cuando ya lo hay.
   var MEDALLA = { linea: ['🥇', '🥈', '🥉'], bingo: ['🏆'] };
+  // Con un solo premio de línea se llama «Línea»; si hubiera varios, «1ª línea», «2ª línea»…
+  function nombreLinea(puesto) { return S.premios.linea.length > 1 ? puesto + 'ª línea' : 'Línea'; }
   function filaPodio(medalla, nombre, premio, g) {
     return '<li class="' + (g ? 'gana' : '') + '"><span class="med" aria-hidden="true">' + medalla + '</span>' +
       '<span class="pr"><b>' + nombre + '</b><small>' + (premio ? esc(premio) : 'Premio por determinar') + '</small></span>' +
@@ -311,7 +313,7 @@
     ['linea', 'bingo'].forEach(function (tipo) {
       S.premios[tipo].forEach(function (pr) {
         var g = S.ganadores[tipo].filter(function (x) { return x.puesto === pr.puesto; })[0];
-        filas.push(filaPodio(MEDALLA[tipo][pr.puesto - 1] || '🎖️', tipo === 'bingo' ? 'Bingo' : pr.puesto + 'ª línea', pr.premio, g));
+        filas.push(filaPodio(MEDALLA[tipo][pr.puesto - 1] || '🎖️', tipo === 'bingo' ? 'Bingo' : nombreLinea(pr.puesto), pr.premio, g));
       });
     });
     retosPremium().forEach(function (r) {
@@ -443,7 +445,7 @@
         (function () {
           var filas = [];
           ['linea', 'bingo'].forEach(function (tipo) {
-            S.premios[tipo].forEach(function (pr) { filas.push([tipo, '', pr, (MEDALLA[tipo][pr.puesto - 1] || '🎖️') + ' ' + (tipo === 'bingo' ? 'Bingo' : pr.puesto + 'ª línea')]); });
+            S.premios[tipo].forEach(function (pr) { filas.push([tipo, '', pr, (MEDALLA[tipo][pr.puesto - 1] || '🎖️') + ' ' + (tipo === 'bingo' ? 'Bingo' : nombreLinea(pr.puesto))]); });
           });
           retosPremium().forEach(function (r) {
             premiosDe('premium', r.id).forEach(function (pr) { filas.push(['premium', r.id, pr, r.icono + ' ' + r.titulo]); });
@@ -642,6 +644,11 @@
         .then(function () { return cargarTodo(); })
         .then(function () { subiendo = false; $modal.close(); render(true); toast(reto(id).premium ? 'Prueba enviada. El jurado la votará.' : reto(id).desde ? 'Foto enviada. La valorará el jurado.' : 'Foto subida.'); })
         .catch(function (e) { subiendo = false; toast(traducir(e)); btn.disabled = false; btn.textContent = 'Enviar foto'; });
+    },
+    sonido: function () {
+      var on = !window.NPGFIESTA.sonidoOn();
+      window.NPGFIESTA.sonido(on); render(true);
+      if (on) window.NPGFIESTA.eructo(true); // al activarlo, un eructo de bienvenida
     },
     cantar: function (d) {
       API.rpc('cantar', { p_tipo: d.tipo })

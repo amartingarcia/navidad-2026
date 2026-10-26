@@ -32,7 +32,7 @@ class Mock:
     def __init__(self):
         self.users = {}; self.tokens = {}; self.jug = {}; self.enl = {}
         self.cartones = {}; self.jurado = []; self.fotos = []; self.reac = []; self.gan = {'linea':[],'bingo':[],'premium':[]}; self.cantos = []; self.votos = []
-        self.premios = [{'tipo':'linea','puesto':1,'premio':None},{'tipo':'linea','puesto':2,'premio':None},{'tipo':'linea','puesto':3,'premio':None},{'tipo':'bingo','puesto':1,'premio':None}]
+        self.premios = [{'tipo':'linea','puesto':1,'premio':None},{'tipo':'bingo','puesto':1,'premio':None}]
         self.premios=[dict(p,reto='') for p in self.premios]+[{'tipo':'premium','reto':'31','puesto':1,'premio':None}]
         self.storage = {}; self.ajustes = {'pass_defecto': DEFAULT_PASS}; self.log = []
         self.add('adrianmg231189@gmail.com','Adrián',True,'AdminPass-12345')

@@ -16,9 +16,9 @@ Frontend estático (HTML, CSS y JS sin build) sobre Supabase (Auth, Postgres con
 
 - Cartón 3x3 fijo por jugador: casilla central «Manteo a Maritsu» y 8 retos al azar del pool (`supabase/retos.sql`, tabla `retos`).
 - Solo cuentan las **filas horizontales**. Las fotos se aceptan al subirlas y se pueden repetir (la nueva sustituye a la anterior).
-- **Cantos:** «¡Cantar línea!» y «¡Cantar bingo!» no llevan foto. El jurado (2 jugadores al azar + el admin) revisa las fotos del jugador y vota; se necesitan **2 de 3** a favor. Nadie vota su propio canto. Hay **3 premios de línea y 1 de bingo** (premios por determinar, columna `premios.premio`). Solo el jurado valora la foto del pibón de la noche.
+- **Cantos:** «¡Cantar línea!» y «¡Cantar bingo!» no llevan foto. El jurado (2 jugadores al azar + el admin) revisa las fotos del jugador y vota; se necesitan **2 de 3** a favor. Nadie vota su propio canto. Hay **1 premio de línea y 1 de bingo** (premios por determinar, columna `premios.premio`). Solo el jurado valora la foto del pibón de la noche.
 - **Retos premium** (p. ej. el Bizum de Goria): están fuera del cartón, cualquiera puede intentarlos y gana quien primero consiga que el jurado (2 de 3) valide su prueba. Cada uno tiene su premio. Se marcan en `supabase/retos.sql`.
-- La pestaña **Premios** muestra el podio (1ª, 2ª, 3ª línea, bingo y cada reto premium) con el nombre de quien se lo lleva; el admin define el texto de cada premio en Admin → Premios.
+- La pestaña **Premios** muestra el podio (línea, bingo y cada reto premium) con el nombre de quien se lo lleva; el admin define el texto de cada premio en Admin → Premios.
 - Cada reto puede tener una hora mínima de valoración (`retos.desde`; el pibón de la noche, el 27 dic 12:00). La comprueba el servidor.
 - Muro común con todas las fotos y reacciones ❤️ 😂 🍆 🔥 👍 🖕 🚀.
 
@@ -58,4 +58,4 @@ El simulador reproduce las reglas de RLS y las funciones del esquema; no sustitu
 ## Fiesta (solo presentación, `fiesta.js`)
 - **Modo discoteca:** del 26 dic 18:00 al 27 dic 08:00 (`data.js` → `EVENTO.discoDesde/discoHasta`): luces, bola de espejos, logo con neón y lluvia de chupitos, cañas y botellas. Para verlo antes: añade `?disco` a la dirección (`?disco=0` lo apaga).
 - **Premio gordo:** cuando sale un ganador nuevo (línea, bingo o reto premium) a todos los que tengan la app abierta les salta una pantalla con confeti, sirena y el nombre. Se muestra una vez por navegador. Para probarla: `?demo=gordo`.
-- **Papá Noel borracho:** cruza la pantalla cada ~40-70 s. Se desactiva con «reducir movimiento» del sistema.
+- **Papás Noel borrachos:** cada 20-35 s cruzan la pantalla entre 1 y 3 (más en modo discoteca), con bocadillos («¡Sujétame el cubata!», «¿Y mi Jäger?»…; lista `FRASES` en `fiesta.js`) y, si el sonido está activo, un eructo sintetizado. El botón 🔊/🔇 de la cabecera lo silencia (se recuerda). Se desactivan con «reducir movimiento» del sistema.

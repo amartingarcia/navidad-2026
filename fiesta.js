@@ -41,7 +41,7 @@
   }
 
   /* ---------- Papá Noel borracho ---------- */
-  var FRASES = ['¡hip!', '¡otra ronda!', '¡yo no he sido!', '¡feliz navidá!', 'jo, jo… ¡hip!', '¿dónde está el Jäger?', '¡estoy fino!', '¡no preguntéis!'];
+  var FRASES = ['¡Sujétame el cubata!', '¿Y mi Jäger?', '¿Quieres sentirla en el pecho?', '¡hip!', '¡otra ronda!', '¡yo no he sido!', '¡feliz navidá!', '¡estoy fino!', 'jo, jo… ¡hip!', '¡esto no es sidra!'];
   var SANTA = '<svg viewBox="0 0 74 104" width="64" height="90" focusable="false">' +
     '<rect x="19" y="87" width="14" height="13" rx="4" fill="#2b1a14"/><rect x="40" y="87" width="14" height="13" rx="4" fill="#2b1a14"/>' +
     '<path d="M15 47 Q36 37 57 47 L61 90 Q36 96 11 90 Z" fill="#D4283C"/>' +
@@ -59,28 +59,77 @@
     '<path d="M26 27 q3 -3 6 0 M40 27 q3 -3 6 0" stroke="#13233B" stroke-width="1.7" fill="none" stroke-linecap="round"/>' +
     '<path d="M21 24 Q22 5 44 5 Q56 7 58 20 Q40 13 21 24 Z" fill="#D4283C"/>' +
     '<rect x="19" y="19.5" width="36" height="8" rx="4" fill="#F4F7FB"/><circle cx="58" cy="20" r="5.4" fill="#F4F7FB"/></svg>';
-  var santaEl = null, santaTimer = 0;
+  var cicloTimer = 0;
+  function frase() { return FRASES[Math.floor(Math.random() * FRASES.length)]; }
+  function nuevoSanta(retardo) {
+    setTimeout(function () {
+      if (document.querySelectorAll('.santa').length >= 5) return;
+      var dur = 13 + Math.random() * 9, esc = .8 + Math.random() * .45;
+      var sa = el('div', '', 'santa paseando' + (Math.random() < .5 ? '' : ' izq'), '<span class="dice"></span><span class="cuerpo">' + SANTA + '</span>');
+      sa.style.setProperty('--dur', dur.toFixed(1) + 's');
+      sa.style.setProperty('--esc', esc.toFixed(2));
+      sa.style.bottom = 'calc(' + Math.round(78 + Math.random() * 46) + 'px + env(safe-area-inset-bottom))';
+      sa.querySelector('.dice').textContent = frase();
+      sa.setAttribute('aria-hidden', 'true');
+      sa.addEventListener('animationend', function (e) { if (e.animationName === 'paseo' || e.animationName === 'paseo-izq') sa.remove(); });
+      document.body.appendChild(sa);
+      setTimeout(eructo, dur * 1000 * .3); // justo cuando le sale el bocadillo
+    }, retardo);
+  }
+  // Cada cierto rato salen entre 1 y 3 Papás Noel (más y más seguidos en modo discoteca).
   function santa() {
     if (reducir) return;
-    if (!santaEl) {
-      santaEl = el('div', 'santa', '', '<span class="dice"></span><span class="cuerpo">' + SANTA + '</span>');
-      santaEl.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(santaEl);
-      santaEl.addEventListener('animationend', function (e) {
-        if (e.animationName === 'paseo' || e.animationName === 'paseo-izq') santaEl.className = '';
-      });
-    }
-    clearTimeout(santaTimer);
-    santaTimer = setTimeout(function pasear() {
-      var ocupado = document.hidden || document.getElementById('gordo') || (document.getElementById('modal') && document.getElementById('modal').open);
-      if (!ocupado) {
-        santaEl.querySelector('.dice').textContent = FRASES[Math.floor(Math.random() * FRASES.length)];
-        santaEl.className = '';
-        void santaEl.offsetWidth; // reinicia la animación
-        santaEl.className = Math.random() < .5 ? 'paseando' : 'paseando izq';
+    clearTimeout(cicloTimer);
+    cicloTimer = setTimeout(function ciclo() {
+      var modal = document.getElementById('modal');
+      if (!document.hidden && !document.getElementById('gordo') && !(modal && modal.open)) {
+        var n = (disco() ? 2 : 1) + Math.floor(Math.random() * 3);
+        for (var i = 0; i < n; i++) nuevoSanta(i * (1500 + Math.random() * 3500));
       }
-      santaTimer = setTimeout(pasear, 40000 + Math.random() * 30000);
-    }, 7000);
+      cicloTimer = setTimeout(ciclo, (disco() ? 12000 : 20000) + Math.random() * 14000);
+    }, 3000);
+  }
+
+  /* ---------- sonido: eructos y sirena ---------- */
+  var ac = null, ultimoEructo = 0;
+  function sonidoOn() { try { return localStorage.getItem('npgingo.sonido') !== '0'; } catch (e) { return true; } }
+  function sonido(on) { try { localStorage.setItem('npgingo.sonido', on ? '1' : '0'); } catch (e) { /* sin almacenamiento */ } }
+  // El navegador solo deja sonar después de que la persona haya tocado la pantalla alguna vez.
+  function puedeSonar() { return sonidoOn() && (!navigator.userActivation || navigator.userActivation.hasBeenActive); }
+  function contexto() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      if (!ac) ac = new AC();
+      if (ac.state === 'suspended') ac.resume();
+      return ac;
+    } catch (e) { return null; }
+  }
+  // Eructo sintetizado: zumbido grave que baja de tono, con temblor y algo de aire.
+  function eructo(forzar) {
+    if (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500)) return;
+    var c = contexto();
+    if (!c) return;
+    ultimoEructo = Date.now();
+    var t = c.currentTime, d = .6 + Math.random() * .8, f0 = 90 + Math.random() * 60;
+    var o = c.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * .5, t + d);
+    var lfo = c.createOscillator(); lfo.frequency.value = 22 + Math.random() * 12;
+    var lg = c.createGain(); lg.gain.value = .45; lfo.connect(lg);
+    var am = c.createGain(); am.gain.value = .55; lg.connect(am.gain);
+    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 5;
+    f.frequency.setValueAtTime(950, t); f.frequency.exponentialRampToValueAtTime(240, t + d);
+    var out = c.createGain();
+    out.gain.setValueAtTime(.0001, t); out.gain.exponentialRampToValueAtTime(.4, t + .06);
+    out.gain.setValueAtTime(.4, t + d * .65); out.gain.exponentialRampToValueAtTime(.0001, t + d);
+    var buf = c.createBuffer(1, Math.ceil(c.sampleRate * d), c.sampleRate), datos = buf.getChannelData(0);
+    for (var i = 0; i < datos.length; i++) datos[i] = Math.random() * 2 - 1;
+    var ruido = c.createBufferSource(); ruido.buffer = buf;
+    var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 380; bp.Q.value = .8;
+    var rg = c.createGain(); rg.gain.value = .22;
+    ruido.connect(bp); bp.connect(rg); rg.connect(out);
+    o.connect(am); am.connect(f); f.connect(out); out.connect(c.destination);
+    o.start(t); lfo.start(t); ruido.start(t); o.stop(t + d + .05); lfo.stop(t + d + .05); ruido.stop(t + d + .05);
   }
 
   /* ---------- premio gordo ---------- */
@@ -88,16 +137,16 @@
   var cola = [], abierto = false, confeti = null;
 
   function sirena() {
+    if (!puedeSonar()) return;
+    var c = contexto();
+    if (!c) return;
     try {
-      var AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return;
-      var ac = new AC(), o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+      var o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
       o.type = 'sawtooth'; g.gain.value = .045;
-      for (var i = 0; i < 6; i++) { o.frequency.setValueAtTime(i % 2 ? 640 : 880, t + i * .32); }
+      for (var i = 0; i < 6; i++) o.frequency.setValueAtTime(i % 2 ? 640 : 880, t + i * .32);
       g.gain.setValueAtTime(.045, t + 1.8); g.gain.linearRampToValueAtTime(0, t + 2);
-      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 2.05);
-      setTimeout(function () { try { ac.close(); } catch (e) { /* nada */ } }, 2500);
-    } catch (e) { /* el navegador no deja sonar sin tocar antes: da igual */ }
+      o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 2.05);
+    } catch (e) { /* da igual */ }
   }
 
   function lanzarConfeti(cv) {
@@ -150,5 +199,5 @@
     setTimeout(function () { if (document.getElementById('gordo') === g) cerrar(); }, 11000);
   }
 
-  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar };
+  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar, eructo: eructo, sonidoOn: sonidoOn, sonido: sonido };
 })();

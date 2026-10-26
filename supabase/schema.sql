@@ -109,7 +109,7 @@ create table if not exists public.reacciones (
   primary key (foto_id, jugador_id, emoji)
 );
 
--- Prizes in play, one row per podium place: 1st/2nd/3rd line and the bingo. `premio` null = still to be decided.
+-- Prizes in play, one row per podium place: the línea and the bingo. `premio` null = still to be decided.
 -- The number of rows of each type is the number of prizes available (the admin edits the text with definir_premio).
 create table if not exists public.premios (
   tipo   text not null check (tipo in ('linea','bingo','premium')),
@@ -183,8 +183,11 @@ begin
 end $$;
 drop index if exists public.cantos_un_pendiente;
 create unique index if not exists cantos_un_pendiente_v3 on public.cantos (jugador_id, tipo, (coalesce(reto, ''))) where estado = 'pend';
-insert into public.premios (tipo, puesto) values ('linea', 1), ('linea', 2), ('linea', 3), ('bingo', 1)
+insert into public.premios (tipo, puesto) values ('linea', 1), ('bingo', 1)
   on conflict (tipo, reto, puesto) do nothing;
+-- Only one línea and one bingo: drop the extra line prizes nobody has won yet (v3 had 3).
+delete from public.premios p where p.tipo = 'linea' and p.puesto > 1
+  and not exists (select 1 from public.ganadores g where g.tipo = 'linea' and g.puesto = p.puesto);
 drop function if exists public.cantar(text);
 drop function if exists public.definir_premio(text, int, text);
 
