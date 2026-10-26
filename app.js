@@ -252,7 +252,7 @@
       ? '<strong>' + d + '</strong><span>días para el 26 de diciembre</span>'
       : '<strong>¡Hoy!</strong><span>Empieza la ruta</span>';
     return '<header class="cab"><div>' + logo() + '<p class="lema">No preguntes, gilipollas</p></div>' +
-      '<div class="cuenta">' + cuenta + '<button class="snd" data-acc="sonido" aria-pressed="' + window.NPGFIESTA.sonidoOn() + '" aria-label="Sonido (eructos y sirena)">' + (window.NPGFIESTA.sonidoOn() ? '🔊' : '🔇') + '</button></div></header>';
+      '<div class="cuenta">' + cuenta + '</div></header>';
   }
   function nav(ruta) {
     var items = [['carton', '🎟️', 'Cartón'], ['premios', '🏆', 'Premios'], ['muro', '📸', 'Muro']];
@@ -644,11 +644,6 @@
         .then(function () { return cargarTodo(); })
         .then(function () { subiendo = false; $modal.close(); render(true); toast(reto(id).premium ? 'Prueba enviada. El jurado la votará.' : reto(id).desde ? 'Foto enviada. La valorará el jurado.' : 'Foto subida.'); })
         .catch(function (e) { subiendo = false; toast(traducir(e)); btn.disabled = false; btn.textContent = 'Enviar foto'; });
-    },
-    sonido: function () {
-      var on = !window.NPGFIESTA.sonidoOn();
-      window.NPGFIESTA.sonido(on); render(true);
-      if (on) window.NPGFIESTA.eructo(true); // al activarlo, un eructo de bienvenida
     },
     cantar: function (d) {
       API.rpc('cantar', { p_tipo: d.tipo })

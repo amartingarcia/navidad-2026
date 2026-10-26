@@ -288,7 +288,6 @@ body.disco .lema::before { content: "🪩 "; }
 @keyframes paseo-izq { from { transform: translateX(calc(100vw + 60px)); } to { transform: translateX(-120px); } }
 @keyframes tambaleo { 0% { transform: rotate(-13deg) translateY(0); } 40% { transform: rotate(3deg) translateY(-4px); } 100% { transform: rotate(14deg) translateY(0); } }
 @keyframes dice { 0%, 24% { opacity: 0; } 28%, 44% { opacity: 1; } 48%, 100% { opacity: 0; } }
-.snd { display: block; margin: 4px 0 0 auto; background: none; border: 1px solid var(--linea); border-radius: 10px; padding: 1px 8px; font-size: 15px; line-height: 1.4; }
 
 /* ───── Premio gordo ───── */
 #gordo { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, rgba(15,30,51,.95), rgba(8,15,28,.98)); overflow: hidden; cursor: pointer; animation: entra .35s ease-out; }

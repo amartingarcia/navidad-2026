@@ -90,12 +90,10 @@
     }, 3000);
   }
 
-  /* ---------- sonido: eructos y sirena ---------- */
+  /* ---------- sonido: eructos y sirena (siempre activo; no hay botón para silenciarlo) ---------- */
   var ac = null, ultimoEructo = 0;
-  function sonidoOn() { try { return localStorage.getItem('npgingo.sonido') !== '0'; } catch (e) { return true; } }
-  function sonido(on) { try { localStorage.setItem('npgingo.sonido', on ? '1' : '0'); } catch (e) { /* sin almacenamiento */ } }
   // El navegador solo deja sonar después de que la persona haya tocado la pantalla alguna vez.
-  function puedeSonar() { return sonidoOn() && (!navigator.userActivation || navigator.userActivation.hasBeenActive); }
+  function puedeSonar() { return !navigator.userActivation || navigator.userActivation.hasBeenActive; }
   function contexto() {
     try {
       var AC = window.AudioContext || window.webkitAudioContext;
@@ -105,45 +103,58 @@
       return ac;
     } catch (e) { return null; }
   }
-  // Eructo sintetizado: zumbido grave que baja de tono, con temblor y algo de aire.
+  // iOS/Safari: el audio se «desbloquea» con el primer toque, así que se prepara en cuanto la persona toca algo.
+  function desbloquear() {
+    var c = contexto();
+    if (!c) return;
+    try { var s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); } catch (e) { /* da igual */ }
+  }
+  ['pointerdown', 'touchend', 'click', 'keydown'].forEach(function (ev) {
+    document.addEventListener(ev, function f() { desbloquear(); document.removeEventListener(ev, f, true); }, true);
+  });
+  // Eructo sintetizado: zumbido que baja de tono, con temblor y aire. Los altavoces de los móviles no reproducen
+  // graves, así que parte de unos 200 Hz y deja los armónicos (diente de sierra) para que se oiga bien.
   function eructo(forzar) {
-    if (!sonidoOn() || (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500))) return;
+    if (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500)) return;
     var c = contexto();
     if (!c) return;
     ultimoEructo = Date.now();
-    var t = c.currentTime, d = .6 + Math.random() * .8, f0 = 90 + Math.random() * 60;
+    var t = c.currentTime, d = .7 + Math.random() * .8, f0 = 190 + Math.random() * 70;
     var o = c.createOscillator(); o.type = 'sawtooth';
     o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * .5, t + d);
-    var lfo = c.createOscillator(); lfo.frequency.value = 22 + Math.random() * 12;
+    var o2 = c.createOscillator(); o2.type = 'square';
+    o2.frequency.setValueAtTime(f0 * 1.51, t); o2.frequency.exponentialRampToValueAtTime(f0 * .78, t + d);
+    var lfo = c.createOscillator(); lfo.frequency.value = 20 + Math.random() * 12;
     var lg = c.createGain(); lg.gain.value = .45; lfo.connect(lg);
     var am = c.createGain(); am.gain.value = .55; lg.connect(am.gain);
-    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 5;
-    f.frequency.setValueAtTime(950, t); f.frequency.exponentialRampToValueAtTime(240, t + d);
+    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 4;
+    f.frequency.setValueAtTime(2400, t); f.frequency.exponentialRampToValueAtTime(520, t + d);
     var out = c.createGain();
-    out.gain.setValueAtTime(.0001, t); out.gain.exponentialRampToValueAtTime(.4, t + .06);
-    out.gain.setValueAtTime(.4, t + d * .65); out.gain.exponentialRampToValueAtTime(.0001, t + d);
+    out.gain.setValueAtTime(.0001, t); out.gain.exponentialRampToValueAtTime(.9, t + .05);
+    out.gain.setValueAtTime(.9, t + d * .65); out.gain.exponentialRampToValueAtTime(.0001, t + d);
     var buf = c.createBuffer(1, Math.ceil(c.sampleRate * d), c.sampleRate), datos = buf.getChannelData(0);
     for (var i = 0; i < datos.length; i++) datos[i] = Math.random() * 2 - 1;
     var ruido = c.createBufferSource(); ruido.buffer = buf;
-    var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 380; bp.Q.value = .8;
-    var rg = c.createGain(); rg.gain.value = .22;
+    var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = .7;
+    var rg = c.createGain(); rg.gain.value = .35;
     ruido.connect(bp); bp.connect(rg); rg.connect(out);
+    var mezcla = c.createGain(); mezcla.gain.value = .6; o2.connect(mezcla); mezcla.connect(am);
     o.connect(am); am.connect(f); f.connect(out); out.connect(c.destination);
-    o.start(t); lfo.start(t); ruido.start(t); o.stop(t + d + .05); lfo.stop(t + d + .05); ruido.stop(t + d + .05);
+    o.start(t); o2.start(t); lfo.start(t); ruido.start(t);
+    o.stop(t + d + .05); o2.stop(t + d + .05); lfo.stop(t + d + .05); ruido.stop(t + d + .05);
   }
 
   // Tocar a un Papá Noel lo hace explotar entre tacos.
   var TACOS = ['¡Hijo de puta!', '¡Cabrón!', '¡Guarro!'];
   var PIEZAS = ['🎅', '🥃', '🍾', '⭐', '🍺', '🧦', '🎄', '💥'];
   function pum() {
-    if (!sonidoOn()) return;
     var c = contexto();
     if (!c) return;
     var t = c.currentTime, d = .35, buf = c.createBuffer(1, Math.ceil(c.sampleRate * d), c.sampleRate), x = buf.getChannelData(0);
     for (var i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / x.length, 3);
     var s = c.createBufferSource(); s.buffer = buf;
-    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
-    var g = c.createGain(); g.gain.value = .5;
+    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2200;
+    var g = c.createGain(); g.gain.value = .9;
     s.connect(f); f.connect(g); g.connect(c.destination); s.start(t);
   }
   function explotar(x, y) {
@@ -237,5 +248,5 @@
     setTimeout(function () { if (document.getElementById('gordo') === g) cerrar(); }, 11000);
   }
 
-  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar, eructo: eructo, sonidoOn: sonidoOn, sonido: sonido };
+  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar, eructo: eructo };
 })();
