@@ -515,31 +515,126 @@
   });
   window.addEventListener('hashchange', function () { render(); });
 
-  /* ---------- nieve (solo en la pantalla de entrada) ---------- */
-  var nv = { on: false, copos: [], raf: 0 };
+  /* ---------- nevada (solo en la pantalla de entrada) ---------- */
+  // Cae nieve y, entre los copos, estrellas de hilo, botellitas verdes y cámaras de fotos.
+  var nv = { on: false, parts: [], raf: 0, w: 0, h: 0, dpr: 1, sprites: null };
+
+  // Sprites dibujados a mano (vectoriales, sin logos) en un canvas aparte y reutilizados en cada frame.
+  function sprite(ancho, alto, dibujo, dpr) {
+    var c = document.createElement('canvas');
+    c.width = Math.ceil(ancho * dpr); c.height = Math.ceil(alto * dpr);
+    var x = c.getContext('2d');
+    x.scale(dpr, dpr); x.lineJoin = 'round'; x.lineCap = 'round';
+    dibujo(x, ancho, alto);
+    return { c: c, w: ancho, h: alto };
+  }
+  function rect(x, a, b, w, h, r) {
+    x.beginPath();
+    if (x.roundRect) x.roundRect(a, b, w, h, r);
+    else x.rect(a, b, w, h);
+  }
+  function crearSprites(dpr) {
+    return {
+      // Estrella de hilo: solo el contorno, como si fuera alambre dorado.
+      estrella: sprite(24, 24, function (x) {
+        x.strokeStyle = '#F4B93E'; x.lineWidth = 1.5;
+        x.beginPath();
+        for (var i = 0; i < 10; i++) {
+          var a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 4.8 : 10.5;
+          x[i ? 'lineTo' : 'moveTo'](12 + r * Math.cos(a), 12 + r * Math.sin(a));
+        }
+        x.closePath(); x.stroke();
+      }, dpr),
+      // Botellita verde con etiqueta naranja (genérica, sin marca).
+      botella: sprite(14, 30, function (x) {
+        x.fillStyle = '#1E6B4A'; rect(x, 2.5, 11, 9, 17, 2.5); x.fill();          // cuerpo
+        x.beginPath(); x.moveTo(5.2, 11.5); x.lineTo(5.6, 4); x.lineTo(8.4, 4); x.lineTo(8.8, 11.5); x.closePath(); x.fill(); // cuello
+        x.fillStyle = '#16543a'; rect(x, 5, 1.5, 4, 3.5, 1); x.fill();             // tapón
+        x.fillStyle = '#F4B93E'; rect(x, 3.4, 16, 7.2, 7, 1); x.fill();            // etiqueta
+        x.fillStyle = 'rgba(255,255,255,.35)'; rect(x, 3.6, 12.5, 1.2, 12, .6); x.fill(); // brillo
+      }, dpr),
+      // Cámara de fotos: cuerpo claro, objetivo oscuro con aro rojo y botón.
+      camara: sprite(28, 22, function (x) {
+        x.fillStyle = '#d7dfeb'; rect(x, 1.5, 5, 25, 15, 3); x.fill();
+        x.fillStyle = '#b6c2d4'; rect(x, 8, 2, 7, 4, 1.2); x.fill();               // visor
+        x.fillStyle = '#D4283C'; x.beginPath(); x.arc(22.5, 8.5, 1.6, 0, 6.2832); x.fill(); // botón
+        x.fillStyle = '#13233B'; x.beginPath(); x.arc(14, 13, 5.4, 0, 6.2832); x.fill();
+        x.strokeStyle = '#D4283C'; x.lineWidth = 1.2; x.beginPath(); x.arc(14, 13, 5.4, 0, 6.2832); x.stroke();
+        x.fillStyle = 'rgba(255,255,255,.55)'; x.beginPath(); x.arc(12.3, 11.3, 1.3, 0, 6.2832); x.fill();
+      }, dpr)
+    };
+  }
+  function ajustarNevada() {
+    var cv = document.getElementById('nieve');
+    nv.w = window.innerWidth; nv.h = window.innerHeight;
+    nv.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(nv.w * nv.dpr); cv.height = Math.round(nv.h * nv.dpr);
+    return cv.getContext('2d');
+  }
+  function particula(tipo, arriba) {
+    var esSprite = tipo !== 'copo';
+    return {
+      tipo: tipo, x: Math.random() * nv.w, y: arriba ? -30 : Math.random() * nv.h,
+      r: tipo === 'copo' ? 1 + Math.random() * 3 : 0,
+      v: esSprite ? .45 + Math.random() * .7 : .4 + Math.random() * 1.1,
+      o: Math.random() * 6, rot: Math.random() * 6.28, vr: (Math.random() - .5) * .03,
+      e: .85 + Math.random() * .5
+    };
+  }
   function nieve(on) {
     var cv = document.getElementById('nieve');
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) on = false;
     if (on === nv.on) return;
     nv.on = on;
     if (!on) { cancelAnimationFrame(nv.raf); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); return; }
-    cv.width = window.innerWidth; cv.height = window.innerHeight;
-    var ctx = cv.getContext('2d');
-    nv.copos = [];
-    for (var i = 0; i < 90; i++) nv.copos.push({ x: Math.random() * cv.width, y: Math.random() * cv.height, r: 1 + Math.random() * 3, v: .4 + Math.random() * 1.1, o: Math.random() * 6 });
+    var ctx = ajustarNevada();
+    nv.sprites = crearSprites(nv.dpr);
+    nv.parts = [];
+    var mezcla = { copo: 70, estrella: 9, botella: 5, camara: 5 };
+    Object.keys(mezcla).forEach(function (t) { for (var i = 0; i < mezcla[t]; i++) nv.parts.push(particula(t, false)); });
+    window.removeEventListener('resize', nv.onResize);
+    nv.onResize = function () { if (nv.on) { ctx = ajustarNevada(); nv.sprites = crearSprites(nv.dpr); } };
+    window.addEventListener('resize', nv.onResize);
     (function pintar(t) {
-      ctx.clearRect(0, 0, cv.width, cv.height);
-      ctx.fillStyle = 'rgba(244,247,251,.85)';
-      nv.copos.forEach(function (c) {
-        c.y += c.v; c.x += Math.sin(t / 1200 + c.o) * .4;
-        if (c.y > cv.height + 5) { c.y = -5; c.x = Math.random() * cv.width; }
-        ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 6.2832); ctx.fill();
+      ctx.setTransform(nv.dpr, 0, 0, nv.dpr, 0, 0);
+      ctx.clearRect(0, 0, nv.w, nv.h);
+      nv.parts.forEach(function (c) {
+        c.y += c.v; c.x += Math.sin(t / 1200 + c.o) * (c.tipo === 'copo' ? .4 : .3);
+        if (c.y > nv.h + 30) { var n = particula(c.tipo, true); for (var k in n) c[k] = n[k]; }
+        if (c.tipo === 'copo') {
+          ctx.fillStyle = 'rgba(244,247,251,.85)';
+          ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 6.2832); ctx.fill();
+        } else {
+          var sp = nv.sprites[c.tipo], w = sp.w * c.e, h = sp.h * c.e;
+          c.rot += c.vr;
+          ctx.save(); ctx.globalAlpha = .9; ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+          ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore();
+        }
       });
       if (nv.on) nv.raf = requestAnimationFrame(pintar);
     })(0);
   }
 
+  // Mide dónde queda la esquina superior izquierda de la N con la fuente que realmente se está usando
+  // (Bagel Fat One, o la de reserva si no carga) y expone esa posición al CSS para apoyar ahí el gorro.
+  function medirN() {
+    try {
+      var el = document.querySelector('.logo'), cv = document.createElement('canvas').getContext('2d');
+      cv.font = '400 100px ' + getComputedStyle(el || document.body).fontFamily;
+      var m = cv.measureText('N');
+      if (!m.fontBoundingBoxAscent) return; // navegador sin soporte: valen los valores por defecto del CSS
+      var base = ((100 - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2 + m.fontBoundingBoxAscent) / 100; // línea base desde arriba (line-height: 1)
+      var r = document.documentElement.style;
+      r.setProperty('--n-x', (-m.actualBoundingBoxLeft / 100) + 'em');
+      r.setProperty('--n-y', (base - m.actualBoundingBoxAscent / 100) + 'em');
+      r.setProperty('--n-alto', (m.actualBoundingBoxAscent / 100) + 'em');
+    } catch (e) { /* sin medida: se queda la posición por defecto */ }
+  }
+
   state = cargar();
   if (!location.hash) location.hash = state.session ? '#/carton' : '#/entrar';
   render();
+  medirN();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(medirN);
+  if (document.fonts && document.fonts.load) document.fonts.load('400 100px "Bagel Fat One"').then(medirN, medirN);
 })();

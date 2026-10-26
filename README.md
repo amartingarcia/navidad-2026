@@ -23,7 +23,7 @@ También funciona abriendo `index.html` directamente.
 - Jurado: 2 jugadores al azar más el admin (3 en total). Los elegidos ven un banner en su cartón y una pestaña «Jurado» para validar las fotos de los demás (nunca las suyas).
 - Instalable en el móvil (manifest + iconos): «Añadir a pantalla de inicio» en Safari o Chrome.
 - Hora mínima: el pibón de la noche no se puede valorar hasta el día siguiente (27 dic, 12:00; se cambia en `data.js`, campo `desde`); el resto se valora en el momento; el jugador puede subir la foto antes. En *Admin → Reloj de prueba* se simula la hora de la quedada para probarlo.
-- Muro común con las fotos validadas de todos y reacciones (😂 🔥 💀 👏 🍻) que cualquier jugador puede poner o quitar. Más panel de admin (sorteo del jurado y enlaces).
+- Muro común con las fotos validadas de todos y reacciones (❤️ 😂 🍆 🔥 👍 🖕 🚀) que cualquier jugador puede poner o quitar. Más panel de admin (sorteo del jurado y enlaces).
 
 ## Lo que no hace todavía
 

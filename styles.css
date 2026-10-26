@@ -32,7 +32,7 @@ button { cursor: pointer; }
 
 /* Cabecera */
 .cab { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 18px; }
-.logo { font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1; margin: 0; color: var(--oro); letter-spacing: .5px; }
+.logo { font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1; margin: 0; color: var(--oro); letter-spacing: .5px; padding: .22em 0 0 .34em; }
 .lema { margin: 4px 0 0; font-size: 13px; color: var(--suave); }
 .cuenta { text-align: right; line-height: 1.1; }
 .cuenta strong { display: block; font-family: var(--display); font-weight: 400; font-size: 30px; color: var(--nieve); }
@@ -202,5 +202,13 @@ button, a { touch-action: manipulation; }
 
 /* Gorro de Navidad sobre la N del logo */
 .logo-n { position: relative; display: inline-block; }
-.gorro { position: absolute; width: .8em; height: .8em; left: .06em; top: -.62em; transform: rotate(-45deg); transform-origin: 50% 90%; pointer-events: none; overflow: visible; }
+.gorro {
+  --s: calc(var(--n-alto, .7em) * 1.0);           /* tamaño del gorro: algo mayor que la altura de la N */
+  position: absolute; width: var(--s); height: var(--s);
+  /* el centro del ala del gorro (51 %, 83 % del dibujo) se apoya en la esquina superior izquierda de la N */
+  left: calc(var(--n-x, .04em) + .05em - var(--s) * .51);
+  top: calc(var(--n-y, .18em) + .06em - var(--s) * .83);
+  transform: rotate(-45deg); transform-origin: 51% 83%;
+  pointer-events: none; overflow: visible;
+}
 .cab { padding-top: 14px; }
