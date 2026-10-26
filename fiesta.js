@@ -96,17 +96,16 @@
       document.body.appendChild(sa);
     }, retardo);
   }
-  // Cada cierto rato salen entre 1 y 3 Papás Noel (más y más seguidos en modo discoteca).
+  // Cada 10 s sale una tanda de 2 personajes (Papá o Mamá Noel).
   function santa() {
     if (reducir) return;
     clearTimeout(cicloTimer);
     cicloTimer = setTimeout(function ciclo() {
       var modal = document.getElementById('modal');
       if (!document.hidden && !document.getElementById('gordo') && !(modal && modal.open)) {
-        var n = (disco() ? 2 : 1) + Math.floor(Math.random() * 3);
-        for (var i = 0; i < n; i++) nuevoSanta(i * (1500 + Math.random() * 3500));
+        for (var i = 0; i < 2; i++) nuevoSanta(i * (1500 + Math.random() * 2500)); // 2 personajes por tanda
       }
-      cicloTimer = setTimeout(ciclo, (disco() ? 12000 : 20000) + Math.random() * 14000);
+      cicloTimer = setTimeout(ciclo, 10000); // una tanda cada 10 s (igual en modo discoteca)
     }, 3000);
   }
 
