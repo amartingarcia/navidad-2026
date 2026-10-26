@@ -107,7 +107,7 @@
   }
   // Eructo sintetizado: zumbido grave que baja de tono, con temblor y algo de aire.
   function eructo(forzar) {
-    if (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500)) return;
+    if (!sonidoOn() || (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500))) return;
     var c = contexto();
     if (!c) return;
     ultimoEructo = Date.now();
@@ -131,6 +131,44 @@
     o.connect(am); am.connect(f); f.connect(out); out.connect(c.destination);
     o.start(t); lfo.start(t); ruido.start(t); o.stop(t + d + .05); lfo.stop(t + d + .05); ruido.stop(t + d + .05);
   }
+
+  // Tocar a un Papá Noel lo hace explotar entre tacos.
+  var TACOS = ['¡Hijo de puta!', '¡Cabrón!', '¡Guarro!'];
+  var PIEZAS = ['🎅', '🥃', '🍾', '⭐', '🍺', '🧦', '🎄', '💥'];
+  function pum() {
+    if (!sonidoOn()) return;
+    var c = contexto();
+    if (!c) return;
+    var t = c.currentTime, d = .35, buf = c.createBuffer(1, Math.ceil(c.sampleRate * d), c.sampleRate), x = buf.getChannelData(0);
+    for (var i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / x.length, 3);
+    var s = c.createBufferSource(); s.buffer = buf;
+    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
+    var g = c.createGain(); g.gain.value = .5;
+    s.connect(f); f.connect(g); g.connect(c.destination); s.start(t);
+  }
+  function explotar(x, y) {
+    var caja = el('div', '', 'pum', '<span class="boom" aria-hidden="true">💥</span><span class="taco" role="status">' + TACOS[Math.floor(Math.random() * TACOS.length)] + '</span>');
+    caja.style.left = x + 'px'; caja.style.top = y + 'px';
+    for (var i = 0; i < 14; i++) {
+      var a = Math.random() * 6.283, r = 70 + Math.random() * 110, p = el('span', '', 'trozo', PIEZAS[i % PIEZAS.length]);
+      p.style.setProperty('--dx', Math.round(Math.cos(a) * r) + 'px');
+      p.style.setProperty('--dy', Math.round(Math.sin(a) * r - 40) + 'px');
+      p.style.setProperty('--rot', Math.round((Math.random() - .5) * 720) + 'deg');
+      caja.appendChild(p);
+    }
+    document.body.appendChild(caja);
+    setTimeout(function () { caja.remove(); }, 1900);
+    pum();
+    setTimeout(function () { eructo(true); }, 140);
+    try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* sin vibración */ }
+  }
+  document.addEventListener('click', function (e) {
+    var sa = e.target.closest && e.target.closest('.santa');
+    if (!sa) return;
+    var r = sa.getBoundingClientRect();
+    explotar(r.left + r.width / 2, r.top + r.height / 2);
+    sa.remove();
+  });
 
   /* ---------- premio gordo ---------- */
   var TAGS = ['¡Y sin preguntar, gilipollas!', '¡Eres un crack!', '¡Una ronda para el campeón!', '¡Aparta, que llega!', '¡Esto es NPG!'];

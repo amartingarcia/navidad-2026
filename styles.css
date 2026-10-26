@@ -280,7 +280,7 @@ body.disco .lema::before { content: "🪩 "; }
 .santa.izq svg { transform: scale(calc(var(--esc) * -1), var(--esc)); }
 .santa .dice { position: absolute; left: 50%; bottom: calc(96px * var(--esc)); transform: translateX(-50%); white-space: nowrap; background: #F4F7FB; color: var(--tinta); font-weight: 700; font-size: 13px; padding: 4px 9px; border-radius: 10px; opacity: 0; }
 .santa .dice::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: #F4F7FB; }
-.santa.paseando { animation: paseo var(--dur) linear forwards; }
+.santa.paseando { animation: paseo var(--dur) linear forwards; pointer-events: auto; padding: 0 10px; margin-left: -10px; width: 84px; cursor: pointer; }
 .santa.paseando.izq { animation-name: paseo-izq; }
 .santa.paseando .cuerpo { animation: tambaleo 1.1s ease-in-out infinite alternate; }
 .santa.paseando .dice { animation: dice var(--dur) linear forwards; }
@@ -311,3 +311,13 @@ body.disco .lema::before { content: "🪩 "; }
   #luces i, #bola .esfera, #bola .facetas, #bola .brillo, body.disco .logo, body.disco #luces, #gordo .sirena, .gordo-ico, .gordo-in { animation: none !important; }
   .santa { display: none; }
 }
+
+/* ───── Papá Noel explotando ───── */
+.pum { position: fixed; z-index: 70; width: 0; height: 0; pointer-events: none; }
+.pum .boom { position: absolute; left: -40px; top: -48px; font-size: 80px; line-height: 1; animation: bum .5s ease-out forwards; }
+.pum .taco { position: absolute; left: 0; top: -70px; transform: translateX(-50%); white-space: nowrap; background: var(--rojo); color: #fff; font-family: var(--display); font-size: 24px; padding: 4px 14px; border-radius: 14px; border: 3px solid #fff; box-shadow: 0 4px 0 var(--rojo-osc); animation: taco 1.8s ease-out forwards; }
+.pum .trozo { position: absolute; left: -12px; top: -12px; font-size: 24px; animation: vuela 1.2s cubic-bezier(.2,.7,.4,1) forwards; }
+@keyframes bum { from { transform: scale(.2); opacity: 1; } 60% { transform: scale(1.5); opacity: 1; } to { transform: scale(2); opacity: 0; } }
+@keyframes vuela { to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; } }
+@keyframes taco { 0% { transform: translateX(-50%) scale(.3); opacity: 0; } 12% { transform: translateX(-50%) scale(1.2); opacity: 1; } 22% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { transform: translateX(-50%) translateY(-24px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pum .trozo, .pum .boom { animation: none; opacity: 0; } }
