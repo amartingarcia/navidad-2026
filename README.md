@@ -32,7 +32,7 @@ También funciona abriendo `index.html` directamente.
 
 ## Publicar en GitHub Pages
 
-El workflow `.github/workflows/pages.yml` publica la raíz del repo en cada push a `main`. Hay que activar Pages con origen **GitHub Actions** en *Settings → Pages*. En repos privados, Pages requiere un plan de pago.
+En *Settings → Pages* elige *Deploy from a branch*, rama `main` y carpeta `/ (root)`. GitHub despliega solo en cada push, sin workflow propio. En repos privados, Pages requiere un plan de pago.
 
 ## Datos de ejemplo
 
