@@ -1,0 +1,44 @@
+name: Supabase Keep-Alive
+
+# Free Supabase projects pause after 7 days without activity. This pings the DB a few times a day
+# with the anonymous role only: it calls the public RPC that resolves a link token to a name
+# (dummy tokens, returns null), so it never touches or returns real data.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch: # manual run from the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    name: Ping Supabase DB
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep-alive — read-only RPC calls
+        run: |
+          set -euo pipefail
+          # URL and publishable key are public (they ship in config.js); read them from there.
+          SUPABASE_URL=$(grep -oP "SUPABASE_URL:\s*'\K[^']+" config.js)
+          SUPABASE_KEY=$(grep -oP "SUPABASE_KEY:\s*'\K[^']+" config.js)
+
+          FAILED=0
+          for i in 1 2 3; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              -H "apikey: ${SUPABASE_KEY}" -H "Content-Type: application/json" \
+              -d "{\"p_token\":\"keepalive-${i}\"}" \
+              "${SUPABASE_URL}/rest/v1/rpc/nombre_por_token")
+            if [[ "$STATUS" =~ ^2 ]]; then
+              echo "✅ ping ${i} -> HTTP ${STATUS}"
+            else
+              echo "❌ ping ${i} -> HTTP ${STATUS}"
+              FAILED=1
+            fi
+          done
+
+          if [[ "$FAILED" -eq 1 ]]; then
+            echo "One or more keep-alive requests failed."
+            exit 1
+          fi
