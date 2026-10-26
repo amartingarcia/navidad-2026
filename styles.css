@@ -168,3 +168,9 @@ dialog::backdrop { background: rgba(6, 12, 22, .75); }
 .celda { padding: 6px 4px; gap: 3px; }
 .celda .ico { font-size: 22px; }
 .celda .tit { font-size: 11.5px; -webkit-line-clamp: 5; }
+
+/* Reacciones del muro */
+.reacciones { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 14px; }
+.reac { display: inline-flex; align-items: center; gap: 5px; min-height: 40px; padding: 0 12px; border-radius: 999px; border: 2px solid var(--linea); background: transparent; font-size: 18px; line-height: 1; }
+.reac b { font-size: 13px; font-variant-numeric: tabular-nums; }
+.reac[aria-pressed="true"] { border-color: var(--oro); background: #26406a; }

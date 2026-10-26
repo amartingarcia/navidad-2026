@@ -66,7 +66,7 @@
         user: n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       };
     });
-    var s = { session: null, players: jugadores, photos: [], ganadores: { linea: null, bingo: null }, jurado: sortear(jugadores) };
+    var s = { session: null, players: jugadores, photos: [], reacciones: {}, ganadores: { linea: null, bingo: null }, jurado: sortear(jugadores) };
     var colores = ['#1E6B4A', '#D4283C', '#18304F', '#8a5a00', '#5b2a86'];
     function foto(pid, rid, estado, min) {
       s.photos.push({ id: pid + '-' + rid + '-' + min, playerId: pid, retoId: rid, status: estado,
@@ -80,6 +80,11 @@
       foto(p.id, c[0], 'ok', 70 - k * 5);
       if (k < 4) foto(p.id, c[1], 'pend', 15 - k * 3);
     });
+    // Algunas reacciones de ejemplo en las primeras fotos validadas.
+    var vistas = s.photos.filter(function (f) { return f.status === 'ok'; }).slice(0, 4);
+    vistas.forEach(function (f, i) {
+      s.reacciones[f.id] = { '😂': [2, 3, 4, 5].slice(0, 4 - i), '🔥': i % 2 ? [6] : [6, 7] };
+    });
     return s;
   }
   function cargar() {
@@ -87,6 +92,7 @@
       var raw = localStorage.getItem(KEY);
       if (raw) {
         var s = JSON.parse(raw);
+        if (!s.reacciones) s.reacciones = {};
         s.players.forEach(function (p) { p.admin = p.name === N.ADMIN; });
         var adm = s.players.filter(function (p) { return p.admin; })[0];
         if (s.session && s.session.role === 'admin') s.session = adm ? { role: 'jugador', playerId: adm.id } : null;
@@ -262,13 +268,22 @@
     return h;
   }
 
+  function barraReacciones(f) {
+    var yoId = yo() ? yo().id : null, rs = state.reacciones[f.id] || {};
+    return '<div class="reacciones" role="group" aria-label="Reacciones">' + N.REACCIONES.map(function (e) {
+      var quienes = rs[e] || [], mia = quienes.indexOf(yoId) !== -1;
+      return '<button class="reac" data-acc="reaccion" data-id="' + esc(f.id) + '" data-e="' + e + '" aria-pressed="' + mia + '" aria-label="' + e + ', ' + quienes.length + '">' +
+        '<span aria-hidden="true">' + e + '</span>' + (quienes.length ? '<b>' + quienes.length + '</b>' : '') + '</button>';
+    }).join('') + '</div>';
+  }
+
   function vMuro() {
     var oks = state.photos.filter(function (f) { return f.status === 'ok'; }).sort(function (a, b) { return b.ts - a.ts; });
     if (!oks.length) return '<div class="vacio">Aún no hay fotos validadas. La primera la sube alguien con valor.</div>';
     return '<div class="muro">' + oks.map(function (f) {
       var r = reto(f.retoId);
       return '<figure class="foto-card"><img src="' + f.img + '" alt="' + esc(r.titulo) + '" loading="lazy">' +
-        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + (f.por ? '<br><small>Validada por ' + esc(f.por) + '</small>' : '') + '</figcaption></figure>';
+        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + (f.por ? '<br><small>Validada por ' + esc(f.por) + '</small>' : '') + '</figcaption>' + barraReacciones(f) + '</figure>';
     }).join('') + '</div>';
   }
 
@@ -307,7 +322,7 @@
     var h = location.hash.replace(/^#\/?/, '').split('/');
     return { nombre: h[0] || '', arg: h[1] || '' };
   }
-  function render() {
+  function render(conservarScroll) {
     var r = ruta(), html;
     if (r.nombre === 'salir') { state.session = null; guardar(); location.hash = '#/entrar'; return; }
     if (r.nombre === 'entrar' || !state.session) {
@@ -322,7 +337,7 @@
     var vistas = { carton: vCarton, muro: vMuro, admin: vAdmin, jurado: vJurado };
     html = cabecera() + (vistas[nombre] || vCarton)() + nav(nombre);
     $app.innerHTML = html;
-    window.scrollTo(0, 0);
+    if (!conservarScroll) window.scrollTo(0, 0);
   }
 
   /* ---------- acciones ---------- */
@@ -373,6 +388,12 @@
     },
     aprobar: function (d) { cambiarFoto(d.id, 'ok'); toast('Foto validada.'); },
     rechazar: function (d) { cambiarFoto(d.id, 'ko'); toast('Foto rechazada.'); },
+    reaccion: function (d) {
+      var p = yo(), rs = state.reacciones[d.id] || (state.reacciones[d.id] = {}), lista = rs[d.e] || (rs[d.e] = []);
+      var i = lista.indexOf(p.id);
+      if (i === -1) lista.push(p.id); else lista.splice(i, 1);
+      guardar(); render(true);
+    },
     sortear: function () { state.jurado = sortear(state.players); guardar(); render(); toast('Jurado nuevo sorteado.'); },
     demoJurado: function () { state.session = { role: 'jugador', playerId: state.jurado[0] }; guardar(); location.hash = '#/carton'; render(); },
     tab: function (d) { adminTab = d.tab; render(); },
@@ -430,7 +451,7 @@
       guardar(); location.hash = '#/carton'; render();
     }
   });
-  window.addEventListener('hashchange', render);
+  window.addEventListener('hashchange', function () { render(); });
 
   /* ---------- nieve (solo en la pantalla de entrada) ---------- */
   var nv = { on: false, copos: [], raf: 0 };

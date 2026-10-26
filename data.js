@@ -30,6 +30,9 @@ window.NPG = {
       pista: 'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.' }
   ],
 
+  // Reacciones del muro (cada jugador puede poner o quitar cada una).
+  REACCIONES: ['😂', '🔥', '💀', '👏', '🍻'],
+
   // Cantos: no están en el cartón. Se desbloquean al completar una línea o los 9 sellos
   // y funcionan igual que cualquier reto: foto + validación del jurado.
   CANTOS: {

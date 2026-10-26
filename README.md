@@ -22,7 +22,7 @@ También funciona abriendo `index.html` directamente.
 - Admin: es un jugador más (tiene cartón) con funciones especiales: sorteo del jurado y enlaces personales.
 - Jurado: 2 jugadores al azar más el admin (3 en total). Los elegidos ven un banner en su cartón y una pestaña «Jurado» para validar las fotos de los demás (nunca las suyas).
 - Instalable en el móvil (manifest + iconos): «Añadir a pantalla de inicio» en Safari o Chrome.
-- Muro de fotos validadas, y panel de admin (sorteo del jurado y enlaces).
+- Muro común con las fotos validadas de todos y reacciones (😂 🔥 💀 👏 🍻) que cualquier jugador puede poner o quitar. Más panel de admin (sorteo del jurado y enlaces).
 
 ## Lo que no hace todavía
 
