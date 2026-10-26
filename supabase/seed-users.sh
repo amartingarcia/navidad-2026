@@ -7,8 +7,20 @@
 #   ADMIN_EMAIL         real email of the admin
 #   ADMIN_PASS          admin password (use a strong, unique one)
 #   ADMIN_NAME          admin display name
+# Values can also live in supabase/.env (git-ignored; copy supabase/.env.example). Real env vars win over the file.
 # Usage: ./seed-users.sh jugadores.txt     (one player name per line, admin NOT included)
 set -euo pipefail
+
+ENV_FILE="$(dirname "$0")/.env"
+if [ -f "$ENV_FILE" ]; then
+  while IFS= read -r linea || [ -n "$linea" ]; do
+    case "$linea" in ''|'#'*) continue ;; esac
+    clave="${linea%%=*}"; valor="${linea#*=}"
+    valor="${valor%\"}"; valor="${valor#\"}"
+    # Only fill what is not already set in the environment; no shell evaluation of the file.
+    if [ -z "${!clave:-}" ]; then export "$clave=$valor"; fi
+  done < "$ENV_FILE"
+fi
 
 : "${SUPABASE_URL:?}" "${SERVICE_ROLE_KEY:?}" "${DEFAULT_PASS:?}" "${ADMIN_EMAIL:?}" "${ADMIN_PASS:?}" "${ADMIN_NAME:?}"
 FILE="${1:?usage: $0 jugadores.txt}"

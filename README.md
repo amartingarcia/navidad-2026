@@ -32,11 +32,10 @@ Frontend estático (HTML, CSS y JS sin build) sobre Supabase (Auth, Postgres con
 
 1. Supabase: ejecutar `supabase/schema.sql` en el SQL Editor (idempotente).
 2. Supabase → Authentication: desactivar **Confirm email** y **Allow new users to sign up**; Site URL = URL de Vercel.
-3. Crear usuarios, desde tu máquina (secretos solo en variables de entorno):
+3. Crear usuarios, desde tu máquina. Los secretos van en `supabase/.env` (ignorado por git; plantilla en `supabase/.env.example`) o como variables de entorno:
    ```bash
+   cp supabase/.env.example supabase/.env           # rellena SERVICE_ROLE_KEY, ADMIN_PASS y DEFAULT_PASS
    cp supabase/jugadores.example.txt supabase/jugadores.txt   # ajusta nombres (sin el admin)
-   export SUPABASE_URL=https://<ref>.supabase.co SERVICE_ROLE_KEY=… DEFAULT_PASS=… \
-          ADMIN_EMAIL=… ADMIN_PASS=… ADMIN_NAME=Adrián
    ./supabase/seed-users.sh supabase/jugadores.txt
    ```
 4. Entrar como admin → *Admin*: repartir cartones, sortear jurado y enviar los enlaces.
