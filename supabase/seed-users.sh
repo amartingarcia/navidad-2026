@@ -26,22 +26,40 @@ fi
 FILE="${1:?usage: $0 jugadores.txt}"
 for b in curl jq openssl; do command -v "$b" >/dev/null || { echo "missing: $b" >&2; exit 1; }; done
 
-H=(-H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "Content-Type: application/json")
+# New-format secret keys (sb_secret_...) are not JWTs: they go only in the apikey header.
+# Legacy service_role keys are JWTs and also go in Authorization.
+H=(-H "apikey: $SERVICE_ROLE_KEY" -H "Content-Type: application/json")
+case "$SERVICE_ROLE_KEY" in sb_secret_*) ;; *) H+=(-H "Authorization: Bearer $SERVICE_ROLE_KEY") ;; esac
+case "$SERVICE_ROLE_KEY" in
+  sb_publishable_*) echo "SERVICE_ROLE_KEY is the PUBLISHABLE key. Use the secret / service_role key (Project Settings -> API Keys)." >&2; exit 1 ;;
+esac
+
+OUT="$(mktemp)"; trap 'rm -f "$OUT"' EXIT
+# api METHOD PATH [curl args...] -> prints the body; on HTTP error prints status + body to stderr and exits.
+api() {
+  local m="$1" p="$2"; shift 2
+  local code
+  code=$(curl -sS -o "$OUT" -w '%{http_code}' "${H[@]}" -X "$m" "$SUPABASE_URL$p" "$@") || { echo "network error calling $p" >&2; exit 1; }
+  case "$code" in
+    2*) cat "$OUT" ;;
+    *)  echo "HTTP $code on $m $p: $(cat "$OUT")" >&2; return 22 ;;
+  esac
+}
 
 # Store the default password server-side (used by resetear_pass / pass_cambiada). Not readable by clients.
-curl -fsS "${H[@]}" -H "Prefer: resolution=merge-duplicates" -X POST "$SUPABASE_URL/rest/v1/ajustes" \
-  -d "$(jq -n --arg v "$DEFAULT_PASS" '{clave:"pass_defecto", valor:$v}')" >/dev/null
+api POST /rest/v1/ajustes -H "Prefer: resolution=merge-duplicates" \
+  -d "$(jq -n --arg v "$DEFAULT_PASS" '{clave:"pass_defecto", valor:$v}')" >/dev/null || exit 1
 echo "ajustes.pass_defecto OK"
 
 crear() { # email password nombre admin(true|false)
   local body code
   body=$(jq -n --arg e "$1" --arg p "$2" --arg n "$3" --argjson a "$4" \
     '{email:$e, password:$p, email_confirm:true, user_metadata:{nombre:$n, admin:$a}}')
-  code=$(curl -sS -o /tmp/seed.out -w '%{http_code}' "${H[@]}" -X POST "$SUPABASE_URL/auth/v1/admin/users" -d "$body")
+  code=$(curl -sS -o "$OUT" -w '%{http_code}' "${H[@]}" -X POST "$SUPABASE_URL/auth/v1/admin/users" -d "$body") || { echo "network error creating $3" >&2; exit 1; }
   case "$code" in
     200|201) echo "created: $3" ;;
     422)     echo "skipped (already exists): $3" ;;
-    *)       echo "ERROR $code creating $3: $(cat /tmp/seed.out)" >&2; exit 1 ;;
+    *)       echo "ERROR HTTP $code creating $3: $(cat "$OUT")" >&2; exit 1 ;;
   esac
 }
 
@@ -51,10 +69,9 @@ while IFS= read -r nombre || [ -n "$nombre" ]; do
   nombre="$(printf '%s' "$nombre" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
   [ -z "$nombre" ] && continue
   # Skip players that already exist (idempotent re-runs).
-  ya=$(curl -fsS "${H[@]}" -G "$SUPABASE_URL/rest/v1/jugadores" --data-urlencode "nombre=eq.$nombre" --data-urlencode "select=id" | jq 'length')
+  ya=$(api GET "/rest/v1/jugadores?select=id&nombre=eq.$(jq -rn --arg n "$nombre" '$n|@uri')" | jq 'length') || exit 1
   if [ "$ya" != "0" ]; then echo "skipped (already exists): $nombre"; continue; fi
   crear "$(openssl rand -hex 9)@npgingo.local" "$DEFAULT_PASS" "$nombre" false
 done < "$FILE"
 
-rm -f /tmp/seed.out
 echo "Done. Links are shown in the app (Admin -> Enlaces)."
