@@ -152,7 +152,6 @@
         '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div></figure>';
     }).join('') + '</div>';
   }
-  function boteTotal() { return state.fines.reduce(function (a, f) { return a + f.eur; }, 0); }
   function dias() {
     var d = Math.ceil((new Date(N.EVENTO.fecha + 'T00:00:00') - new Date()) / 86400000);
     return d;
@@ -168,8 +167,8 @@
       '<div class="cuenta">' + cuenta + '</div></header>';
   }
   function nav(ruta) {
-    var items = [['carton', '🎟️', 'Cartón'], ['muro', '📸', 'Muro'], ['bote', '💶', 'Bote']];
-    if (soyAdmin()) items = [['admin', '🛠️', 'Admin'], ['muro', '📸', 'Muro'], ['bote', '💶', 'Bote']];
+    var items = [['carton', '🎟️', 'Cartón'], ['muro', '📸', 'Muro']];
+    if (soyAdmin()) items = [['admin', '🛠️', 'Admin'], ['muro', '📸', 'Muro']];
     else if (soyJurado()) items.splice(1, 0, ['jurado', '⚖️', 'Jurado']);
     return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + items.map(function (it) {
       return '<a href="#/' + it[0] + '"' + (ruta === it[0] ? ' aria-current="page"' : '') + '><span aria-hidden="true">' + it[1] + '</span>' + it[2] + '</a>';
@@ -262,21 +261,6 @@
     }).join('') + '</div>';
   }
 
-  function vBote() {
-    var total = boteTotal();
-    var h = '<section class="panel bote"><p>Bote acumulado</p><div class="cifra">' + eur(total) + '</div>' +
-      '<div class="reparto"><div><b>' + eur(Math.round(total * 0.3 * 100) / 100) + '</b><span>Premio a la línea (30 %)</span></div>' +
-      '<div><b>' + eur(Math.round(total * 0.7 * 100) / 100) + '</b><span>Premio al bingo (70 %)</span></div></div>' +
-      '<p style="margin-top:12px;font-size:13px">Reparto de ejemplo. Los premios reales están por decidir.</p></section>';
-    h += '<section class="panel"><h3>Multas</h3>';
-    if (!state.fines.length) h += '<p>Nadie ha pagado todavía. Dará guerra.</p>';
-    state.fines.slice().sort(function (a, b) { return b.ts - a.ts; }).forEach(function (f) {
-      h += '<div class="fila"><div><b>' + esc(jugador(f.playerId).name) + '</b><small>' + esc(f.concepto) + ' · ' + hora(f.ts) + '</small></div><b>' +
-        (f.extra ? esc(f.extra) : eur(f.eur)) + '</b></div>';
-    });
-    return h + '</section>';
-  }
-
   function vJurado() {
     var p = yo();
     return '<section class="panel"><h2>Eres del jurado</h2><p>Valida las fotos de tus colegas. Las tuyas las valida otra persona del jurado o el admin. Si dudas, rechaza y que la repitan.</p></section>' +
@@ -317,8 +301,10 @@
         '<label class="campo"><span>Jugador</span><select name="p">' + state.players.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join('') + '</select></label>' +
         '<label class="campo"><span>Motivo</span><select name="s">' + N.SANCIONES.map(function (s) {
           return '<option value="' + s.id + '">' + esc(s.concepto) + ' (' + (s.extra || eur(s.eur)) + ')</option>';
-        }).join('') + '</select></label><button class="btn oro ancho" type="submit">Apuntar al bote</button></form>' +
-        '<p class="vacio" style="padding-top:0">Total acumulado: ' + eur(boteTotal()) + '</p>';
+        }).join('') + '</select></label><button class="btn oro ancho" type="submit">Apuntar multa</button></form>' +
+        '<section class="panel"><h3>Multas apuntadas</h3>' + (state.fines.length ? state.fines.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (f) {
+          return '<div class="fila"><div><b>' + esc(jugador(f.playerId).name) + '</b><small>' + esc(f.concepto) + ' · ' + hora(f.ts) + '</small></div><b>' + (f.extra ? esc(f.extra) : eur(f.eur)) + '</b></div>';
+        }).join('') : '<p>Nadie ha pagado todavía. Dará guerra.</p>') + '</section>';
     }
 
     if (adminTab === 'enlaces') {
@@ -349,7 +335,7 @@
     if (soyAdmin() && (nombre === '' || nombre === 'carton')) nombre = 'admin';
     if (!soyAdmin() && (nombre === '' || nombre === 'admin')) nombre = 'carton';
     if (nombre === 'jurado' && !soyJurado()) nombre = 'carton';
-    var vistas = { carton: vCarton, muro: vMuro, bote: vBote, admin: vAdmin, jurado: vJurado };
+    var vistas = { carton: vCarton, muro: vMuro, admin: vAdmin, jurado: vJurado };
     html = cabecera() + (vistas[nombre] || vCarton)() + nav(nombre);
     $app.innerHTML = html;
     window.scrollTo(0, 0);

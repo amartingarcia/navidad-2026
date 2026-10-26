@@ -20,7 +20,7 @@ También funciona abriendo `index.html` directamente.
 - Subida de foto por reto (cámara del móvil), con compresión en el cliente.
 - Jurado: 2 jugadores al azar más el admin (3 en total). Los elegidos ven un banner en su cartón, una pestaña «Jurado» y pueden validar las fotos de los demás (nunca las suyas). El admin puede volver a sortear.
 - Instalable en el móvil (manifest + iconos): «Añadir a pantalla de inicio» en Safari o Chrome.
-- Muro de fotos validadas, bote de multas con reparto de ejemplo y panel de admin (validar fotos, cantos de línea y bingo, multas y enlaces).
+- Muro de fotos validadas, y panel de admin (validar fotos, cantos de línea y bingo, multas y enlaces).
 
 ## Lo que no hace todavía
 
