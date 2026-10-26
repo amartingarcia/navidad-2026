@@ -71,9 +71,9 @@
       sa.style.bottom = 'calc(' + Math.round(78 + Math.random() * 46) + 'px + env(safe-area-inset-bottom))';
       sa.querySelector('.dice').textContent = frase();
       sa.setAttribute('aria-hidden', 'true');
-      sa.addEventListener('animationend', function (e) { if (e.animationName === 'paseo' || e.animationName === 'paseo-izq') sa.remove(); });
+      sa.addEventListener('animationend', function (e) { if (e.animationName === 'paseo' || e.animationName === 'paseo-izq') { clearTimeout(sa.eructoT); sa.remove(); } });
       document.body.appendChild(sa);
-      setTimeout(eructo, dur * 1000 * .3); // justo cuando le sale el bocadillo
+      sa.eructoT = setTimeout(eructo, dur * 1000 * .3); // justo cuando le sale el bocadillo (se cancela si lo explotan)
     }, retardo);
   }
   // Cada cierto rato salen entre 1 y 3 Papás Noel (más y más seguidos en modo discoteca).
@@ -120,17 +120,22 @@
       .then(function (b) { return new Promise(function (ok, ko) { c.decodeAudioData(b, ok, ko); }); })
       .then(function (b) { bufEructo = b; }, function () { cargandoEructo = false; });
   }
+  // Nunca suenan dos a la vez: el automático se salta si ya hay uno sonando y el de la explosión corta el anterior.
+  var sonando = null;
   function eructo(forzar) {
-    if (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500)) return;
+    if (!forzar && (!puedeSonar() || sonando || Date.now() - ultimoEructo < 2500)) return;
     var c = contexto();
     if (!c) return;
     if (!bufEructo) { cargarEructo(); return; }
     ultimoEructo = Date.now();
     try {
+      if (sonando) { try { sonando.stop(); } catch (e) { /* ya parado */ } }
       var s = c.createBufferSource(), g = c.createGain();
       s.buffer = bufEructo; g.gain.value = .8;
-      s.connect(g); g.connect(c.destination); s.start(0);
-    } catch (e) { /* da igual */ }
+      s.connect(g); g.connect(c.destination);
+      s.onended = function () { if (sonando === s) sonando = null; };
+      sonando = s; s.start(0);
+    } catch (e) { sonando = null; }
   }
   ['pointerdown', 'touchend', 'click', 'keydown'].forEach(function (ev) {
     document.addEventListener(ev, function f() { desbloquear(); document.removeEventListener(ev, f, true); }, true);
@@ -156,9 +161,10 @@
   document.addEventListener('click', function (e) {
     var sa = e.target.closest && e.target.closest('.santa');
     if (!sa) return;
+    clearTimeout(sa.eructoT);
     var r = sa.getBoundingClientRect();
-    explotar(r.left + r.width / 2, r.top + r.height / 2);
     sa.remove();
+    explotar(r.left + r.width / 2, r.top + r.height / 2);
   });
 
   /* ---------- premio gordo ---------- */
