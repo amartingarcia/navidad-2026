@@ -358,7 +358,8 @@
     } else {
       if (f && f.status === 'ko') h += '<p class="pista"><b>El jurado la ha rechazado.</b> Sube otra.</p>';
       h += '<img class="vista" id="vista" alt="" hidden>' +
-        '<label class="campo"><span>Foto del reto</span><input id="archivo" type="file" accept="image/*" capture="environment"></label>' +
+        '<div class="origen"><label class="btn oro">📷 Hacer foto<input class="archivo" type="file" accept="image/*" capture="environment"></label>' +
+        '<label class="btn fantasma">🖼️ Fototeca<input class="archivo" type="file" accept="image/*"></label></div>' +
         '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cancelar</button>' +
         '<button class="btn" id="enviar" data-acc="enviar" data-id="' + id + '" disabled>Enviar foto</button></div>';
     }
@@ -432,7 +433,7 @@
     if (fn) { if (el.tagName === 'BUTTON') e.preventDefault(); fn(el.dataset); }
   });
   document.addEventListener('change', function (e) {
-    if (e.target.id !== 'archivo' || !e.target.files[0]) return;
+    if (!e.target.classList.contains('archivo') || !e.target.files[0]) return;
     comprimir(e.target.files[0], function (data) {
       imgPendiente = data;
       var v = document.getElementById('vista');
