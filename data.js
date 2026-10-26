@@ -45,8 +45,7 @@ window.NPG = {
       pista: 'Foto tuya con el cartón abierto en el móvil y los 9 sellos a la vista. El jurado comprueba las 9 fotos.' }
   },
 
-  // Los 22 jugadores incluyen al admin: tiene cartón como el resto, más funciones especiales.
-  ADMIN: 'Adri',
-  JUGADORES: ['Dani', 'Marcos', 'Raúl', 'Javi', 'Nacho', 'Pablo', 'Sergio', 'Álvaro', 'Iván', 'Rubén', 'Fer',
-    'Toni', 'Edu', 'Jesús', 'Carlos', 'David', 'Óscar', 'Víctor', 'Manu', 'Luis', 'Adri', 'Jota']
+  // Los 23 jugadores incluyen al admin: tiene cartón como el resto, más funciones especiales.
+  ADMIN: 'Adrián',
+  JUGADORES: ['Andrés', 'Amós', 'Adrián', 'Casillas', 'Chuchi', 'Chivi', 'Pulido', 'Dani Ligero', 'Felipe', 'Flin', 'German', 'Gato', 'Iñaki', 'Goria', 'Josean', 'Juanjo', 'Jorge', 'Parada', 'Josepe', 'Kania', 'Luis', 'Pavón', 'Sergio']
 };

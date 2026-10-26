@@ -4,7 +4,7 @@
 
   var N = window.NPG;
   var RETOS = N.RETOS;
-  var KEY = 'npgingo.poc.v1';
+  var KEY = 'npgingo.poc.v2';
   var JURADO_JUGADORES = 2; // más el admin: 3 en total
   // Solo cuentan las filas horizontales: ni columnas ni diagonales.
   var LINEAS = [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
