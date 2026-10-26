@@ -113,32 +113,34 @@
     document.addEventListener(ev, function f() { desbloquear(); document.removeEventListener(ev, f, true); }, true);
   });
   // Eructo sintetizado: zumbido que baja de tono, con temblor y aire. Los altavoces de los móviles no reproducen
-  // graves, así que parte de unos 200 Hz y deja los armónicos (diente de sierra) para que se oiga bien.
+  // graves, así que se apoya en los armónicos del diente de sierra. Para afinarlo: TONO (Hz de arranque; más alto = más agudo),
+  // VOLUMEN (0 a 1) y BRILLO (Hz del filtro; más bajo = más sordo y «cavernoso»).
+  var ERUCTO = { TONO: 125, VOLUMEN: .42, BRILLO: 1100 };
   function eructo(forzar) {
     if (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500)) return;
     var c = contexto();
     if (!c) return;
     ultimoEructo = Date.now();
-    var t = c.currentTime, d = .7 + Math.random() * .8, f0 = 190 + Math.random() * 70;
+    var t = c.currentTime, d = .7 + Math.random() * .8, f0 = ERUCTO.TONO + Math.random() * 30;
     var o = c.createOscillator(); o.type = 'sawtooth';
     o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * .5, t + d);
-    var o2 = c.createOscillator(); o2.type = 'square';
-    o2.frequency.setValueAtTime(f0 * 1.51, t); o2.frequency.exponentialRampToValueAtTime(f0 * .78, t + d);
+    var o2 = c.createOscillator(); o2.type = 'sawtooth'; o2.detune.value = 18;   // segunda voz algo desafinada: más «gorda»
+    o2.frequency.setValueAtTime(f0, t); o2.frequency.exponentialRampToValueAtTime(f0 * .5, t + d);
     var lfo = c.createOscillator(); lfo.frequency.value = 20 + Math.random() * 12;
     var lg = c.createGain(); lg.gain.value = .45; lfo.connect(lg);
     var am = c.createGain(); am.gain.value = .55; lg.connect(am.gain);
     var f = c.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 4;
-    f.frequency.setValueAtTime(2400, t); f.frequency.exponentialRampToValueAtTime(520, t + d);
+    f.frequency.setValueAtTime(ERUCTO.BRILLO, t); f.frequency.exponentialRampToValueAtTime(ERUCTO.BRILLO * .25, t + d);
     var out = c.createGain();
-    out.gain.setValueAtTime(.0001, t); out.gain.exponentialRampToValueAtTime(.9, t + .05);
-    out.gain.setValueAtTime(.9, t + d * .65); out.gain.exponentialRampToValueAtTime(.0001, t + d);
+    out.gain.setValueAtTime(.0001, t); out.gain.exponentialRampToValueAtTime(ERUCTO.VOLUMEN, t + .08);
+    out.gain.setValueAtTime(ERUCTO.VOLUMEN, t + d * .65); out.gain.exponentialRampToValueAtTime(.0001, t + d);
     var buf = c.createBuffer(1, Math.ceil(c.sampleRate * d), c.sampleRate), datos = buf.getChannelData(0);
     for (var i = 0; i < datos.length; i++) datos[i] = Math.random() * 2 - 1;
     var ruido = c.createBufferSource(); ruido.buffer = buf;
-    var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = .7;
-    var rg = c.createGain(); rg.gain.value = .35;
+    var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 450; bp.Q.value = .8;
+    var rg = c.createGain(); rg.gain.value = .3;
     ruido.connect(bp); bp.connect(rg); rg.connect(out);
-    var mezcla = c.createGain(); mezcla.gain.value = .6; o2.connect(mezcla); mezcla.connect(am);
+    var mezcla = c.createGain(); mezcla.gain.value = .7; o2.connect(mezcla); mezcla.connect(am);
     o.connect(am); am.connect(f); f.connect(out); out.connect(c.destination);
     o.start(t); o2.start(t); lfo.start(t); ruido.start(t);
     o.stop(t + d + .05); o2.stop(t + d + .05); lfo.stop(t + d + .05); ruido.stop(t + d + .05);
@@ -153,8 +155,8 @@
     var t = c.currentTime, d = .35, buf = c.createBuffer(1, Math.ceil(c.sampleRate * d), c.sampleRate), x = buf.getChannelData(0);
     for (var i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / x.length, 3);
     var s = c.createBufferSource(); s.buffer = buf;
-    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2200;
-    var g = c.createGain(); g.gain.value = .9;
+    var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1200;
+    var g = c.createGain(); g.gain.value = .5;
     s.connect(f); f.connect(g); g.connect(c.destination); s.start(t);
   }
   function explotar(x, y) {
