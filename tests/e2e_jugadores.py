@@ -1,6 +1,6 @@
 import sys
 import os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mock import Mock, install, jpeg
+from mock import Mock, install, jpeg, HASTA
 from playwright.sync_api import sync_playwright
 HOST='tivngljbtzadvqtyqokn.supabase.co'; BASE='http://localhost:8081/index.html'
 m=Mock(); res=[]
@@ -82,6 +82,16 @@ with sync_playwright() as p:
     check('pibon queda en revision', 'En revisión' in A.inner_text('button[data-id="6"]'))
     C.reload(); C.wait_for_timeout(1200)
     check('pibon bloqueado en jurado', 'Se puede valorar desde' in C.inner_text('#app') and C.locator('button:has-text("Validar")').count()==0)
+    # fecha limite: el reto 7 cierra en el pasado
+    HASTA['7']='2000-01-01T00:00:00+00:00'
+    A.goto(BASE+'#/carton'); A.wait_for_timeout(300); A.reload(); A.wait_for_timeout(900)
+    check('casilla cerrada marcada', 'Cerrado' in A.inner_text('button[data-id="7"]'))
+    A.click('button[data-acc=reto][data-id="7"]'); A.wait_for_timeout(300)
+    check('sin selector de foto si el plazo ha terminado', A.locator('.archivo').count()==0 and 'Plazo terminado' in A.inner_text('#modal'))
+    A.click('#modal button:has-text("Cerrar")'); HASTA['7']='2099-01-01T00:00:00+00:00'
+    A.reload(); A.wait_for_timeout(900); A.click('button[data-acc=reto][data-id="7"]'); A.wait_for_timeout(300)
+    check('plazo abierto muestra hora limite', 'Plazo: hasta' in A.inner_text('#modal') and A.locator('.archivo').count()==1)
+    A.click('#modal button:has-text("Cancelar")')
     # privacidad: un jugador sin ser jurado no recibe fotos pendientes ajenas
     D,eD=user(b,'#/entrar/tok4'); m.jug[m.uid_by_name('Dani Ligero')]['cambio_pass']=False
     D.fill('input[name=a]','inicial-demo'); D.click('button[type=submit]'); D.wait_for_timeout(1000)

@@ -46,7 +46,7 @@
     var ses = API.sesion();
     return Promise.all([
       API.get('jugadores', 'select=id,nombre,es_admin,cambio_pass&order=nombre'),
-      API.get('retos', 'select=id,icono,titulo,franja,tipo,fijo,pista,desde'),
+      API.get('retos', 'select=id,icono,titulo,franja,tipo,fijo,pista,desde,hasta'),
       API.get('cartones', 'select=jugador_id,celdas'),
       API.get('jurado', 'select=jugador_id'),
       API.get('fotos', 'select=id,jugador_id,reto,ruta,estado,creada,valorada_por&order=creada.asc'),
@@ -145,6 +145,11 @@
     var t = new Date(desdeTs(r)), dia = new Date(N.EVENTO.fecha + 'T00:00:00');
     var otro = t.toDateString() !== dia.toDateString();
     return 'las ' + hora(t) + (otro ? ' del ' + t.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '') : '');
+  }
+  function cerrado(r) { return !!(r && r.hasta && Date.now() > Date.parse(r.hasta)); }
+  function hastaTxt(r) {
+    var t = new Date(Date.parse(r.hasta)), dia = new Date(N.EVENTO.fecha + 'T00:00:00');
+    return 'las ' + hora(t) + (t.toDateString() !== dia.toDateString() ? ' del ' + t.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '') : '');
   }
   function valorable(f) { var t = desdeTs(reto(f.retoId)); return t === null || Date.now() >= t; }
   function dias() { return Math.ceil((new Date(N.EVENTO.fecha + 'T00:00:00') - new Date()) / 86400000); }
@@ -283,6 +288,7 @@
       if (r.fijo) cls += ' centro';
       if (r.tipo === 'grupal') cls += ' grupal';
       var sello = '', etiqueta = '';
+      if (cerrado(r) && !f) { cls += ' cerrada'; sello = '<span class="sello">Cerrado</span>'; etiqueta = ', plazo terminado'; }
       if (f) {
         cls += ' ' + f.status + ' conFoto';
         sello = '<span class="sello">' + { ok: 'OK', pend: 'En revisión', ko: 'Repite' }[f.status] + '</span>';
@@ -455,11 +461,17 @@
     imgPendiente = null;
     var h = '<div class="modal-in"><span class="etq">' + esc(r.franja) + ' · ' + (r.tipo === 'jurado' ? 'lo decide el jurado' : r.tipo) + '</span>' +
       '<h3>' + r.icono + ' ' + esc(r.titulo) + '</h3><p class="pista">' + esc(r.pista) + '</p>' +
+      (r.hasta ? '<p class="pista"><b>' + (cerrado(r) ? 'Plazo terminado (era hasta ' : 'Plazo: hasta ') + hastaTxt(r) + (cerrado(r) ? ').' : '.') + '</b></p>' : '') +
       (r.desde ? '<p class="pista"><b>El jurado lo valora desde ' + desdeTxt(r) + '.</b> Puedes subir la foto antes.</p>' : '');
     if (f && f.status !== 'ko') {
-      h += '<img class="vista" src="' + esc(f.img) + '" alt="Tu foto"><p class="pista"><b>' + (f.status === 'ok' ? 'Hecho.' : 'Enviada. Esperando al jurado.') + '</b> ¿No ha salido bien? Puedes repetirla.</p>';
+      h += '<img class="vista" src="' + esc(f.img) + '" alt="Tu foto"><p class="pista"><b>' + (f.status === 'ok' ? 'Hecho.' : 'Enviada. Esperando al jurado.') + '</b>' + (cerrado(r) ? '' : ' ¿No ha salido bien? Puedes repetirla.') + '</p>';
     } else if (f) {
       h += '<p class="pista"><b>El jurado la ha rechazado.</b> Sube otra.</p>';
+    }
+    if (cerrado(r)) {
+      $modal.innerHTML = h + '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div></div>';
+      if (!$modal.open) $modal.showModal();
+      return;
     }
     h += '<img class="vista" id="vista" alt="" hidden>' +
       '<div class="origen"><label class="btn oro">' + (f ? '📷 Repetir foto' : '📷 Subir foto') + '<input class="archivo" type="file" accept="image/*"></label></div>' +

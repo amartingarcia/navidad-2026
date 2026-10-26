@@ -17,6 +17,7 @@ RETOS = {
  '11':('🎤','Cantar Mané Mané','grupal',False,None),
  '12':('💡','Encender las luces','individual',False,None),
 }
+HASTA = {}   # reto id -> ISO deadline (tests set it)
 JPEG = None
 def jpeg():
     global JPEG
@@ -93,7 +94,7 @@ class Mock:
         if method=='GET':
             data = {
               'jugadores': list(self.jug.values()),
-              'retos': [{'id':k,'icono':v[0],'titulo':v[1],'franja':'x','tipo':v[2],'fijo':v[3],'pista':'pista '+k,'desde':v[4]} for k,v in RETOS.items()],
+              'retos': [{'id':k,'icono':v[0],'titulo':v[1],'franja':'x','tipo':v[2],'fijo':v[3],'pista':'pista '+k,'desde':v[4],'hasta':HASTA.get(k)} for k,v in RETOS.items()],
               'cartones': [{'jugador_id':k,'celdas':v} for k,v in self.cartones.items()],
               'jurado': [{'jugador_id':k} for k in self.jurado],
               'fotos': [f for f in self.fotos if self.visible_foto(f,uid)],
@@ -107,6 +108,7 @@ class Mock:
             return 200,data
         if method=='POST' and t=='fotos':
             d = json.loads(body); assert d['jugador_id']==uid and d['ruta'].startswith(uid+'/'),'new row violates row-level security policy for table "fotos"'
+            assert not HASTA.get(d['reto']) or time.time()<=time.mktime(time.strptime(HASTA[d['reto']][:19],'%Y-%m-%dT%H:%M:%S')),'El plazo de este reto ha terminado'
             assert d['reto'] in self.cartones.get(uid,[]),'new row violates row-level security policy for table "fotos"'
             if any(f['jugador_id']==uid and f['reto']==d['reto'] for f in self.fotos): return 409,{'message':'duplicate key value'}
             f={'id':str(uuid.uuid4()),'jugador_id':uid,'reto':d['reto'],'ruta':d['ruta'],'estado':'pend' if RETOS[d['reto']][4] else 'ok','creada':time.strftime('%Y-%m-%dT%H:%M:%S+00:00',time.gmtime()),'valorada_por':None}

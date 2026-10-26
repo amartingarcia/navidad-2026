@@ -220,3 +220,5 @@ button, a { touch-action: manipulation; }
 .sec { font-family: var(--display); font-weight: 400; font-size: 18px; margin: 18px 0 8px; }
 .nota { margin: 6px 0 0; font-size: 13px; color: var(--suave); }
 .aviso div + div { margin-top: 6px; }
+.celda.cerrada { opacity: .55; filter: grayscale(1); }
+.celda.cerrada .sello { background: var(--tinta); }

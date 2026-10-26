@@ -56,6 +56,7 @@ create table if not exists public.retos (
   pista  text not null,
   desde  timestamptz                              -- jury cannot rule before this moment
 );
+alter table public.retos add column if not exists hasta timestamptz;   -- deadline: no uploads, replacements or deletions after this moment
 
 create table if not exists public.cartones (
   jugador_id uuid primary key references public.jugadores(id) on delete cascade,
@@ -83,6 +84,9 @@ create unique index if not exists fotos_unica_v2 on public.fotos (jugador_id, re
 create or replace function public.foto_estado_inicial() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  if exists (select 1 from retos r where r.id = new.reto and r.hasta is not null and now() > r.hasta) then
+    raise exception 'El plazo de este reto ha terminado';
+  end if;
   new.estado := case when exists (select 1 from retos r where r.id = new.reto and r.desde is not null) then 'pend' else 'ok' end;
   new.valorada_por := null; new.valorada_en := null;
   return new;
@@ -439,7 +443,8 @@ create policy fotos_subir on public.fotos for insert to authenticated
 
 drop policy if exists fotos_borrar on public.fotos;
 create policy fotos_borrar on public.fotos for delete to authenticated
-  using (jugador_id = auth.uid());
+  using (jugador_id = auth.uid()
+         and not exists (select 1 from retos r where r.id = reto and r.hasta is not null and now() > r.hasta));
 
 drop policy if exists reac_leer on public.reacciones;
 create policy reac_leer on public.reacciones for select to authenticated using (true);
