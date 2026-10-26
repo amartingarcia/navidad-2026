@@ -31,7 +31,7 @@ window.NPG = {
   ],
 
   // Reacciones del muro (cada jugador puede poner o quitar cada una).
-  REACCIONES: ['😂', '🔥', '💀', '👏', '🍻'],
+  REACCIONES: ['❤️', '😂', '🍆', '🔥', '👍', '🖕', '🚀'],
 
   // Cantos: no están en el cartón. Se desbloquean al completar una línea o los 9 sellos
   // y funcionan igual que cualquier reto: foto + validación del jurado.

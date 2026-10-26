@@ -178,3 +178,6 @@ dialog::backdrop { background: rgba(6, 12, 22, .75); }
 .reac { display: inline-flex; align-items: center; gap: 5px; min-height: 40px; padding: 0 12px; border-radius: 999px; border: 2px solid var(--linea); background: transparent; font-size: 18px; line-height: 1; }
 .reac b { font-size: 13px; font-variant-numeric: tabular-nums; }
 .reac[aria-pressed="true"] { border-color: var(--oro); background: #26406a; }
+
+button, a { touch-action: manipulation; }
+.reac { padding: 0 10px; }
