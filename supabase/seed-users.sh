@@ -5,7 +5,7 @@
 #   SERVICE_ROLE_KEY    Project Settings -> API Keys -> service_role (secret)
 #   DEFAULT_PASS        initial password for players (they must change it on first login)
 #   ADMIN_EMAIL         real email of the admin
-#   ADMIN_PASS          admin password (use a strong, unique one)
+#   ADMIN_PASS          admin password (any; Supabase enforces its own minimum, 6 by default)
 #   ADMIN_NAME          admin display name
 # Values can also live in supabase/.env (git-ignored; copy supabase/.env.example). Real env vars win over the file.
 # Usage: ./seed-users.sh jugadores.txt     (one player name per line, admin NOT included)
@@ -25,7 +25,6 @@ fi
 : "${SUPABASE_URL:?}" "${SERVICE_ROLE_KEY:?}" "${DEFAULT_PASS:?}" "${ADMIN_EMAIL:?}" "${ADMIN_PASS:?}" "${ADMIN_NAME:?}"
 FILE="${1:?usage: $0 jugadores.txt}"
 for b in curl jq openssl; do command -v "$b" >/dev/null || { echo "missing: $b" >&2; exit 1; }; done
-[ "${#ADMIN_PASS}" -ge 12 ] || { echo "ADMIN_PASS must have at least 12 characters" >&2; exit 1; }
 
 H=(-H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "Content-Type: application/json")
 
