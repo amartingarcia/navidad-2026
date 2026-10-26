@@ -5,6 +5,7 @@
   var N = window.NPG;
   var RETOS = N.RETOS;
   var KEY = 'npgingo.poc.v1';
+  var JURADO_JUGADORES = 2; // más el admin: 3 en total
   var LINEAS = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
   var $app = document.getElementById('app');
   var $modal = document.getElementById('modal');
@@ -91,15 +92,15 @@
       var raw = localStorage.getItem(KEY);
       if (raw) {
         var s = JSON.parse(raw);
-        if (!s.jurado) s.jurado = sortear(s.players); // datos guardados antes de existir el jurado
+        if (!s.jurado || s.jurado.length !== JURADO_JUGADORES) s.jurado = sortear(s.players); // datos guardados con otro tamaño de jurado
         return s;
       }
     } catch (e) { /* sin almacenamiento: sigue en memoria */ }
     return semilla();
   }
-  // Jurado: 3 jugadores al azar (el admin es el cuarto miembro, fijo).
+  // Jurado: 2 jugadores al azar (el admin es el tercer miembro, fijo).
   function sortear(jugadores) {
-    return mezclar(jugadores.map(function (p) { return p.id; }), Math.random).slice(0, 3);
+    return mezclar(jugadores.map(function (p) { return p.id; }), Math.random).slice(0, JURADO_JUGADORES);
   }
   function guardar() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -291,7 +292,7 @@
     if (adminTab === 'pend') h += listaPendientes(null);
 
     if (adminTab === 'jurado') {
-      h += '<section class="panel"><h3>Jurado de la quedada</h3><p>Tres jugadores al azar, más tú como administrador. Ven un banner en su cartón y pueden validar las fotos de los demás (nunca las suyas).</p>' +
+      h += '<section class="panel"><h3>Jurado de la quedada</h3><p>Dos jugadores al azar, más tú como administrador (sois 3 en total). Ven un banner en su cartón y pueden validar las fotos de los demás (nunca las suyas).</p>' +
         state.jurado.map(function (id) {
           return '<div class="fila"><div><b>' + esc(jugador(id).name) + '</b><small>Jurado</small></div><span class="etq ok">En el jurado</span></div>';
         }).join('') + '<div class="fila"><div><b>Admin</b><small>Siempre en el jurado</small></div><span class="etq ok">En el jurado</span></div>' +

@@ -18,7 +18,7 @@ También funciona abriendo `index.html` directamente.
 - Pantalla de entrada con enlace personal (`#/entrar/<token>`): usuario, contraseña provisional y cambio obligatorio.
 - Cartón 3x3 con la casilla central fija (manteo a Maritsu) y 8 retos por jugador, repartidos de forma determinista.
 - Subida de foto por reto (cámara del móvil), con compresión en el cliente.
-- Jurado: 3 jugadores al azar más el admin. Los elegidos ven un banner en su cartón, una pestaña «Jurado» y pueden validar las fotos de los demás (nunca las suyas). El admin puede volver a sortear.
+- Jurado: 2 jugadores al azar más el admin (3 en total). Los elegidos ven un banner en su cartón, una pestaña «Jurado» y pueden validar las fotos de los demás (nunca las suyas). El admin puede volver a sortear.
 - Instalable en el móvil (manifest + iconos): «Añadir a pantalla de inicio» en Safari o Chrome.
 - Muro de fotos validadas, bote de multas con reparto de ejemplo y panel de admin (validar fotos, cantos de línea y bingo, multas y enlaces).
 
