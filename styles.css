@@ -217,3 +217,6 @@ button, a { touch-action: manipulation; }
 .error { color: #ff9aa5; font-size: 14px; margin: 0 0 10px; }
 .btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .campo input[data-msgpass] { min-height: 40px; }
+.sec { font-family: var(--display); font-weight: 400; font-size: 18px; margin: 18px 0 8px; }
+.nota { margin: 6px 0 0; font-size: 13px; color: var(--suave); }
+.aviso div + div { margin-top: 6px; }

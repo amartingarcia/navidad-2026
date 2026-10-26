@@ -16,8 +16,6 @@ RETOS = {
  '10':('📝','Teléfono en una servilleta','individual',False,None),
  '11':('🎤','Cantar Mané Mané','grupal',False,None),
  '12':('💡','Encender las luces','individual',False,None),
- 'linea':('🎯','¡Línea!','canto',False,None),
- 'bingo':('🏁','¡Bingo!','canto',False,None),
 }
 JPEG = None
 def jpeg():
@@ -30,7 +28,8 @@ def jpeg():
 class Mock:
     def __init__(self):
         self.users = {}; self.tokens = {}; self.jug = {}; self.enl = {}
-        self.cartones = {}; self.jurado = []; self.fotos = []; self.reac = []; self.gan = {}
+        self.cartones = {}; self.jurado = []; self.fotos = []; self.reac = []; self.gan = {'linea':[],'bingo':[]}; self.cantos = []; self.votos = []
+        self.cupo = {'linea':3,'bingo':1}
         self.storage = {}; self.ajustes = {'pass_defecto': DEFAULT_PASS}; self.log = []
         self.add('adrianmg231189@gmail.com','Adrián',True,'AdminPass-12345')
         for i,n in enumerate(['Andrés','Amós','Casillas','Chuchi','Dani Ligero']):
@@ -99,21 +98,22 @@ class Mock:
               'jurado': [{'jugador_id':k} for k in self.jurado],
               'fotos': [f for f in self.fotos if self.visible_foto(f,uid)],
               'reacciones': self.reac,
-              'ganadores': [{'tipo':k,'foto_id':v} for k,v in self.gan.items()],
+              'ganadores': [{'canto_id':g['canto'],'tipo':t,'puesto':i+1,'jugador_id':g['jug']} for t in ('linea','bingo') for i,g in enumerate(self.gan[t])],
+              'premios': [{'tipo':t,'cupo':c,'premio':None} for t,c in self.cupo.items()],
+              'cantos': [k for k in self.cantos if k['jugador_id']==uid or k['estado']=='ok' or self.jury(uid)],
+              'votos': self.votos if self.jury(uid) else [],
               'enlaces': [{'jugador_id':k,'token':v} for k,v in self.enl.items()] if self.admin(uid) else [],
             }[t]
             return 200,data
         if method=='POST' and t=='fotos':
             d = json.loads(body); assert d['jugador_id']==uid and d['ruta'].startswith(uid+'/'),'new row violates row-level security policy for table "fotos"'
-            c = self.cartones.get(uid,[])
-            if d['reto'] in ('linea','bingo'): assert self.puede(uid,d['reto'],d.get('fila')),'new row violates row-level security policy for table "fotos"'
-            else: assert d['reto'] in c,'new row violates row-level security policy for table "fotos"'
-            if any(f['jugador_id']==uid and f['reto']==d['reto'] and f.get('fila')==d.get('fila') for f in self.fotos): return 409,{'message':'duplicate key value'}
-            f={'id':str(uuid.uuid4()),'jugador_id':uid,'reto':d['reto'],'fila':d.get('fila'),'ruta':d['ruta'],'estado':'pend','creada':time.strftime('%Y-%m-%dT%H:%M:%S+00:00',time.gmtime()),'valorada_por':None}
+            assert d['reto'] in self.cartones.get(uid,[]),'new row violates row-level security policy for table "fotos"'
+            if any(f['jugador_id']==uid and f['reto']==d['reto'] for f in self.fotos): return 409,{'message':'duplicate key value'}
+            f={'id':str(uuid.uuid4()),'jugador_id':uid,'reto':d['reto'],'ruta':d['ruta'],'estado':'pend' if RETOS[d['reto']][4] else 'ok','creada':time.strftime('%Y-%m-%dT%H:%M:%S+00:00',time.gmtime()),'valorada_por':None}
             self.fotos.append(f); return 201,[f]
         if method=='DELETE' and t=='fotos':
             f = {k:v[0].replace('eq.','',1) for k,v in q.items()}
-            self.fotos=[x for x in self.fotos if not (x['jugador_id']==uid and x['reto']==f['reto'] and x['estado']==f['estado'] and x['estado']!='ok')]; return 204,None
+            self.fotos=[x for x in self.fotos if not (x['jugador_id']==uid and x['reto']==f['reto'])]; return 204,None
         if method=='POST' and t=='reacciones':
             d=json.loads(body); assert d['jugador_id']==uid and any(f['id']==d['foto_id'] and f['estado']=='ok' for f in self.fotos),'new row violates row-level security policy for table "reacciones"'
             self.reac.append(d); return 201,[d]
@@ -121,12 +121,11 @@ class Mock:
             f = {k:v[0].replace('eq.','',1) for k,v in q.items()}
             self.reac=[r for r in self.reac if not (r['foto_id']==f['foto_id'] and r['jugador_id']==uid and r['emoji']==f['emoji'])]; return 204,None
         return 403,{'message':'permission denied for table '+t}
-    def puede(self,uid,reto,fila):
+    def filas_ok(self,uid):
         c=self.cartones.get(uid)
-        if not c: return False
+        if not c: return []
         ok=lambda r: any(f['jugador_id']==uid and f['reto']==r and f['estado']=='ok' for f in self.fotos)
-        if reto=='linea': return fila in (0,1,2) and all(ok(c[fila*3+i]) for i in range(3))
-        return all(ok(r) for r in c)
+        return [i for i in range(3) if all(ok(c[i*3+j]) for j in range(3))], all(ok(r) for r in c)
     def rpc(self,n,a,uid):
         if n=='nombre_por_token':
             for k,t in self.enl.items():
@@ -144,7 +143,7 @@ class Mock:
             assert self.admin(uid),'Solo el admin'
             assert not self.cartones or a.get('p_forzar'),'Ya hay cartones repartidos.'
             self.cartones={}
-            pool=[k for k,v in RETOS.items() if not v[3] and v[2]!='canto']
+            pool=[k for k,v in RETOS.items() if not v[3]]
             for k in self.jug:
                 p=random.sample(pool,8); self.cartones[k]=p[:4]+['2']+p[4:]
             return 200,len(self.cartones)
@@ -159,8 +158,33 @@ class Mock:
             d=RETOS[f['reto']][4]
             assert not d or time.time()>=time.mktime(time.strptime(d[:19],'%Y-%m-%dT%H:%M:%S')),'Todavía no se puede valorar (desde '+d+')'
             f['estado']='ok' if a['p_ok'] else 'ko'; f['valorada_por']=uid
-            if a['p_ok'] and f['reto'] in ('linea','bingo'): self.gan.setdefault(f['reto'],f['id'])
             return 204,None
+        if n=='cantar':
+            t=a['p_tipo']; filas,bingo=self.filas_ok(uid)
+            assert self.cartones.get(uid),'Todavía no tienes cartón'
+            assert len(self.gan[t])<self.cupo[t],'Ya no quedan premios de ese tipo'
+            assert not any(g['jug']==uid for g in self.gan[t]),'Ya has ganado ese premio'
+            assert not any(k['jugador_id']==uid and k['tipo']==t and k['estado']=='pend' for k in self.cantos),'Ya tienes un canto pendiente'
+            if t=='linea': assert filas,'Aún no tienes ninguna fila completa'
+            else: assert bingo,'Aún no tienes las 9 fotos'
+            k={'id':str(uuid.uuid4()),'jugador_id':uid,'tipo':t,'fila':filas[0] if t=='linea' else None,'estado':'pend','creada':time.strftime('%Y-%m-%dT%H:%M:%S+00:00',time.gmtime())}
+            self.cantos.append(k); return 200,k['id']
+        if n=='votar_canto':
+            assert self.jury(uid),'No eres del jurado'
+            k=[x for x in self.cantos if x['id']==a['p_canto']][0]
+            assert k['estado']=='pend','Ese canto ya está resuelto'
+            assert k['jugador_id']!=uid,'No puedes votar tu propio canto'
+            assert not any(v['canto_id']==k['id'] and v['jurado_id']==uid for v in self.votos),'Ya has votado'
+            self.votos.append({'canto_id':k['id'],'jurado_id':uid,'ok':a['p_ok']})
+            vs=[v for v in self.votos if v['canto_id']==k['id']]; si=sum(v['ok'] for v in vs); no=len(vs)-si
+            if si>=2:
+                k['estado']='ok'; self.gan[k['tipo']].append({'canto':k['id'],'jug':k['jugador_id']})
+                if len(self.gan[k['tipo']])>=self.cupo[k['tipo']]:
+                    for o in self.cantos:
+                        if o['tipo']==k['tipo'] and o['estado']=='pend': o['estado']='ko'
+                return 200,'ok'
+            if no>=2: k['estado']='ko'; return 200,'ko'
+            return 200,'pend'
         return 404,{'message':'no rpc '+n}
 
 def install(page, mock, host):

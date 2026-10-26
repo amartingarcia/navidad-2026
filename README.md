@@ -15,15 +15,15 @@ Frontend estático (HTML, CSS y JS sin build) sobre Supabase (Auth, Postgres con
 ## Reglas del juego
 
 - Cartón 3x3 fijo por jugador: casilla central «Manteo a Maritsu» y 8 retos al azar del pool (`supabase/schema.sql`, tabla `retos`).
-- Solo cuentan las **filas horizontales**. Línea y bingo se cantan con foto, como cualquier reto.
-- Jurado: 2 jugadores al azar + el admin. Valida el primero que decide; nunca valida sus propias fotos. Para una línea ve las 3 fotos de la fila y para un bingo las 9.
+- Solo cuentan las **filas horizontales**. Las fotos se aceptan al subirlas y se pueden repetir (la nueva sustituye a la anterior).
+- **Cantos:** «¡Cantar línea!» y «¡Cantar bingo!» no llevan foto. El jurado (2 jugadores al azar + el admin) revisa las fotos del jugador y vota; se necesitan **2 de 3** a favor. Nadie vota su propio canto. Hay **3 premios de línea y 1 de bingo** (premios por determinar, columna `premios.premio`). Solo el jurado valora la foto del pibón de la noche.
 - Cada reto puede tener una hora mínima de valoración (`retos.desde`; el pibón de la noche, el 27 dic 12:00). La comprueba el servidor.
-- Muro común con las fotos validadas y reacciones ❤️ 😂 🍆 🔥 👍 🖕 🚀.
+- Muro común con todas las fotos y reacciones ❤️ 😂 🍆 🔥 👍 🖕 🚀.
 
 ## Seguridad
 
 - Todas las tablas exigen sesión (RLS); el rol anónimo no puede leer ni escribir nada salvo resolver un token a un nombre.
-- Fotos en un bucket privado con URLs firmadas de 1 h. Un jugador solo ve sus fotos y las validadas; el jurado, también las pendientes.
+- Fotos en un bucket privado con URLs firmadas de 1 h. Un jugador ve sus fotos y las aceptadas; el jurado, también las pendientes (pibón).
 - La contraseña inicial vive en `ajustes.pass_defecto`, tabla que ningún cliente puede leer. No está en el repo.
 - `config.js` solo lleva la URL y la clave *publishable* (pública por diseño). La `service_role` nunca va al repo ni al cliente.
 - CSP, `no-referrer`, `noindex` y cabeceras de seguridad en `index.html` y `vercel.json`.
@@ -54,4 +54,3 @@ El simulador reproduce las reglas de RLS y las funciones del esquema; no sustitu
 ## Pendiente
 
 - Completar el pool hasta ~30 retos y confirmar la hora mínima del pibón.
-- Regla opcional de mayoría (2 de 3) en el jurado.

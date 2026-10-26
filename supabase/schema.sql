@@ -5,6 +5,26 @@
 
 create extension if not exists pgcrypto;
 
+-- ───────────────────────── Migration v1 -> v2 (idempotent) ─────────────────────────
+-- v1 sang línea/bingo with a photo; v2 claims are plain "cantos" voted by the jury (2 of 3).
+do $$
+begin
+  if to_regclass('public.fotos') is not null then
+    drop policy if exists fotos_subir on public.fotos;
+    delete from public.fotos where reto in ('linea','bingo');
+    drop index if exists public.fotos_unica;
+    alter table public.fotos drop column if exists fila;      -- also drops its check constraint
+  end if;
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'ganadores' and column_name = 'foto_id') then
+    drop table public.ganadores;                               -- old shape (tipo, foto_id)
+  end if;
+  if to_regclass('public.retos') is not null then
+    delete from public.retos where id in ('linea','bingo');
+  end if;
+end $$;
+drop function if exists public.puede_cantar(text, int);
+
 -- ───────────────────────── Tables ─────────────────────────
 
 create table if not exists public.jugadores (
@@ -27,7 +47,7 @@ create table if not exists public.ajustes (
 );
 
 create table if not exists public.retos (
-  id     text primary key,                        -- '1'..'n', plus 'linea' and 'bingo'
+  id     text primary key,                        -- '1'..'n'
   icono  text not null,
   titulo text not null,
   franja text not null,
@@ -50,15 +70,29 @@ create table if not exists public.fotos (
   id          uuid primary key default gen_random_uuid(),
   jugador_id  uuid not null references public.jugadores(id) on delete cascade,
   reto        text not null references public.retos(id),
-  fila        smallint check (fila between 0 and 2),            -- only for 'linea' claims
   ruta        text not null unique,                             -- storage path: <jugador_id>/<uuid>.jpg
   estado      text not null default 'pend' check (estado in ('pend','ok','ko')),
   creada      timestamptz not null default now(),
   valorada_por uuid references public.jugadores(id),
-  valorada_en  timestamptz,
-  check ((reto = 'linea') = (fila is not null))
+  valorada_en  timestamptz
 );
-create unique index if not exists fotos_unica on public.fotos (jugador_id, reto, coalesce(fila, -1));
+create unique index if not exists fotos_unica_v2 on public.fotos (jugador_id, reto);
+
+-- Photos are accepted as soon as they are uploaded (a player can redo a challenge by replacing it).
+-- Only challenges with a valuation time (the night's "pibón") stay pending for the jury.
+create or replace function public.foto_estado_inicial() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.estado := case when exists (select 1 from retos r where r.id = new.reto and r.desde is not null) then 'pend' else 'ok' end;
+  new.valorada_por := null; new.valorada_en := null;
+  return new;
+end $$;
+drop trigger if exists fotos_estado_inicial on public.fotos;
+create trigger fotos_estado_inicial before insert on public.fotos
+  for each row execute function public.foto_estado_inicial();
+-- Migration: photos that were waiting for the jury are accepted now (except timed challenges).
+update public.fotos set estado = 'ok', valorada_en = coalesce(valorada_en, now())
+ where estado = 'pend' and reto in (select id from public.retos where desde is null);
 
 create table if not exists public.reacciones (
   foto_id    uuid not null references public.fotos(id) on delete cascade,
@@ -67,9 +101,43 @@ create table if not exists public.reacciones (
   primary key (foto_id, jugador_id, emoji)
 );
 
+-- Prizes in play: 3 lines and 1 bingo. `premio` null = still to be decided.
+create table if not exists public.premios (
+  tipo   text primary key check (tipo in ('linea','bingo')),
+  cupo   smallint not null check (cupo > 0),
+  premio text
+);
+insert into public.premios (tipo, cupo) values ('linea', 3), ('bingo', 1) on conflict (tipo) do nothing;
+
+-- A "canto" = a player shouting línea/bingo. No photo: the jury checks the player's validated photos
+-- (3 of the row for a línea, all 9 for a bingo) and needs 2 approvals to accept it.
+create table if not exists public.cantos (
+  id           uuid primary key default gen_random_uuid(),
+  jugador_id   uuid not null references public.jugadores(id) on delete cascade,
+  tipo         text not null check (tipo in ('linea','bingo')),
+  fila         smallint check (fila between 0 and 2),            -- row (0-based) for 'linea'
+  estado       text not null default 'pend' check (estado in ('pend','ok','ko')),
+  creada       timestamptz not null default now(),
+  resuelta_en  timestamptz,
+  check ((tipo = 'linea') = (fila is not null))
+);
+create unique index if not exists cantos_un_pendiente on public.cantos (jugador_id, tipo) where estado = 'pend';
+
+create table if not exists public.votos (
+  canto_id  uuid not null references public.cantos(id) on delete cascade,
+  jurado_id uuid not null references public.jugadores(id) on delete cascade,
+  ok        boolean not null,
+  creada    timestamptz not null default now(),
+  primary key (canto_id, jurado_id)
+);
+
 create table if not exists public.ganadores (
-  tipo    text primary key check (tipo in ('linea','bingo')),
-  foto_id uuid not null references public.fotos(id) on delete cascade
+  canto_id   uuid primary key references public.cantos(id) on delete cascade,
+  tipo       text not null check (tipo in ('linea','bingo')),
+  puesto     smallint not null check (puesto > 0),
+  jugador_id uuid not null references public.jugadores(id) on delete cascade,
+  creada     timestamptz not null default now(),
+  unique (tipo, puesto)
 );
 
 -- ───────────────────────── Challenge pool (first iteration) ─────────────────────────
@@ -86,9 +154,7 @@ insert into public.retos (id, icono, titulo, franja, tipo, fijo, pista, desde) v
  ('9','💩','Peor atuendo del día','Cena','jurado',false,'Foto del atuendo completo. Vota el jurado en la cena.',null),
  ('10','📝','Teléfono en una servilleta a una chica','Noche','individual',false,'Foto de la servilleta entregada, o que otra persona te haga la foto mientras la entregas.',null),
  ('11','🎤','Cantar «Mané Mané»','Nuevo Café','grupal',false,'Foto o vídeo corto del grupo cantando. Vale una sola para todos.',null),
- ('12','💡','Encender las luces de la discoteca al cerrar','Cierre','individual',false,'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.',null),
- ('linea','🎯','¡Línea!','Al completarla','canto',false,'Foto tuya con el cartón abierto en el móvil y una fila horizontal completa a la vista. Solo valen las filas.',null),
- ('bingo','🏁','¡Bingo!','Al completarlo','canto',false,'Foto tuya con el cartón abierto en el móvil y los 9 sellos a la vista.',null)
+ ('12','💡','Encender las luces de la discoteca al cerrar','Cierre','individual',false,'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.',null)
 on conflict (id) do update set
   icono = excluded.icono, titulo = excluded.titulo, franja = excluded.franja, tipo = excluded.tipo,
   fijo = excluded.fijo, pista = excluded.pista, desde = excluded.desde;
@@ -104,34 +170,6 @@ create or replace function public.es_jurado() returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from jurado where jugador_id = auth.uid());
 $$;
-
--- Can the caller claim 'linea' (row p_fila, 0-based) or 'bingo'? Needs the stamps (validated photos).
-create or replace function public.puede_cantar(p_reto text, p_fila int) returns boolean
-language plpgsql stable security definer set search_path = public as $$
-declare
-  c text[]; r text; faltan int := 0;
-begin
-  select celdas into c from cartones where jugador_id = auth.uid();
-  if c is null then return false; end if;
-  if p_reto = 'linea' then
-    if p_fila is null or p_fila not between 0 and 2 then return false; end if;
-    for i in 1..3 loop
-      r := c[p_fila * 3 + i];
-      if not exists (select 1 from fotos where jugador_id = auth.uid() and reto = r and estado = 'ok') then
-        faltan := faltan + 1;
-      end if;
-    end loop;
-    return faltan = 0;
-  elsif p_reto = 'bingo' then
-    foreach r in array c loop
-      if not exists (select 1 from fotos where jugador_id = auth.uid() and reto = r and estado = 'ok') then
-        return false;
-      end if;
-    end loop;
-    return true;
-  end if;
-  return false;
-end $$;
 
 -- ───────────────────────── Profile creation on signup ─────────────────────────
 -- The admin API creates the user with user_metadata {"nombre": "...", "admin": true|false}.
@@ -197,10 +235,84 @@ begin
   update fotos set estado = case when p_ok then 'ok' else 'ko' end,
                    valorada_por = auth.uid(), valorada_en = now()
   where id = p_foto;
+end $$;
 
-  if p_ok and f.reto in ('linea','bingo') then
-    insert into ganadores (tipo, foto_id) values (f.reto, f.id) on conflict (tipo) do nothing;
+-- A player shouts línea (needs a complete row of validated photos) or bingo (all 9 validated).
+create or replace function public.cantar(p_tipo text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare c text[]; v_fila int := null; v_cupo int; v_id uuid; i int;
+begin
+  if auth.uid() is null then raise exception 'Sin sesión'; end if;
+  if p_tipo not in ('linea','bingo') then raise exception 'Tipo no válido'; end if;
+  select celdas into c from cartones where jugador_id = auth.uid();
+  if c is null then raise exception 'Todavía no tienes cartón'; end if;
+  select pr.cupo into v_cupo from premios pr where pr.tipo = p_tipo;
+  if (select count(*) from ganadores g where g.tipo = p_tipo) >= v_cupo then
+    raise exception 'Ya se han llevado todos los premios de este tipo';
   end if;
+  if exists (select 1 from ganadores g where g.tipo = p_tipo and g.jugador_id = auth.uid()) then
+    raise exception 'Ya has ganado esto';
+  end if;
+  if exists (select 1 from cantos k where k.jugador_id = auth.uid() and k.tipo = p_tipo and k.estado = 'pend') then
+    raise exception 'Ya lo has cantado: espera al jurado';
+  end if;
+
+  if p_tipo = 'linea' then
+    for i in 0..2 loop
+      if (select count(*) from fotos f
+          where f.jugador_id = auth.uid() and f.estado = 'ok'
+            and f.reto = any (array[c[i * 3 + 1], c[i * 3 + 2], c[i * 3 + 3]])) = 3 then
+        v_fila := i; exit;
+      end if;
+    end loop;
+    if v_fila is null then raise exception 'No tienes ninguna fila completa'; end if;
+  elsif (select count(distinct f.reto) from fotos f
+         where f.jugador_id = auth.uid() and f.estado = 'ok' and f.reto = any (c)) < 9 then
+    raise exception 'Te faltan sellos para el bingo';
+  end if;
+
+  insert into cantos (jugador_id, tipo, fila) values (auth.uid(), p_tipo, v_fila) returning id into v_id;
+  return v_id;
+end $$;
+
+-- Jury vote on a canto. It is accepted with 2 approvals and rejected as soon as 2 approvals are impossible
+-- (the claimant never votes on their own canto). Prizes go in order of acceptance; when the last one is
+-- taken, the other pending cantos of that type are closed.
+create or replace function public.votar_canto(p_canto uuid, p_ok boolean) returns text
+language plpgsql security definer set search_path = public as $$
+declare k cantos%rowtype; v_si int; v_no int; v_elegibles int; v_cupo int; v_ocupados int; v_estado text := 'pend';
+begin
+  if not exists (select 1 from jurado where jugador_id = auth.uid()) then raise exception 'No eres del jurado'; end if;
+  perform pg_advisory_xact_lock(hashtext('cantos'));
+  select * into k from cantos where id = p_canto for update;
+  if not found then raise exception 'Ese canto no existe'; end if;
+  if k.jugador_id = auth.uid() then raise exception 'No puedes votar tu propio canto'; end if;
+  if k.estado <> 'pend' then raise exception 'Ese canto ya está resuelto'; end if;
+  if exists (select 1 from votos where canto_id = p_canto and jurado_id = auth.uid()) then raise exception 'Ya has votado'; end if;
+
+  insert into votos (canto_id, jurado_id, ok) values (p_canto, auth.uid(), p_ok);
+  select count(*) filter (where v.ok), count(*) filter (where not v.ok) into v_si, v_no from votos v where v.canto_id = p_canto;
+  select count(*) into v_elegibles from jurado j where j.jugador_id <> k.jugador_id;
+
+  if v_si >= 2 then
+    select pr.cupo into v_cupo from premios pr where pr.tipo = k.tipo;
+    select count(*) into v_ocupados from ganadores g where g.tipo = k.tipo;
+    if v_ocupados < v_cupo then
+      insert into ganadores (canto_id, tipo, puesto, jugador_id) values (k.id, k.tipo, v_ocupados + 1, k.jugador_id);
+      update cantos set estado = 'ok', resuelta_en = now() where id = k.id;
+      v_estado := 'ok';
+      if v_ocupados + 1 >= v_cupo then
+        update cantos set estado = 'ko', resuelta_en = now() where tipo = k.tipo and estado = 'pend';
+      end if;
+    else
+      update cantos set estado = 'ko', resuelta_en = now() where id = k.id;
+      v_estado := 'ko';
+    end if;
+  elsif v_elegibles - v_no < 2 then
+    update cantos set estado = 'ko', resuelta_en = now() where id = k.id;
+    v_estado := 'ko';
+  end if;
+  return v_estado;
 end $$;
 
 -- ───────────────────────── Admin RPCs ─────────────────────────
@@ -257,6 +369,7 @@ do $$ begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
     begin alter publication supabase_realtime add table public.fotos; exception when duplicate_object then null; end;
     begin alter publication supabase_realtime add table public.reacciones; exception when duplicate_object then null; end;
+    begin alter publication supabase_realtime add table public.cantos; exception when duplicate_object then null; end;
     begin alter publication supabase_realtime add table public.ganadores; exception when duplicate_object then null; end;
   end if;
 end $$;
@@ -271,12 +384,15 @@ alter table public.jurado     enable row level security;
 alter table public.fotos      enable row level security;
 alter table public.reacciones enable row level security;
 alter table public.ganadores  enable row level security;
+alter table public.premios    enable row level security;
+alter table public.cantos     enable row level security;
+alter table public.votos      enable row level security;
 alter table public.ajustes    enable row level security;   -- no policies: clients cannot read it
 
 -- Clients never write directly except photos / reactions (policies below); everything else goes via RPC.
 revoke all on all tables in schema public from anon, authenticated;
-grant select on public.jugadores, public.retos, public.cartones, public.jurado,
-                public.fotos, public.reacciones, public.ganadores, public.enlaces to authenticated;
+grant select on public.jugadores, public.retos, public.cartones, public.jurado, public.fotos,
+                public.reacciones, public.ganadores, public.enlaces, public.premios, public.cantos, public.votos to authenticated;
 grant insert, delete on public.fotos to authenticated;
 grant insert, delete on public.reacciones to authenticated;
 
@@ -289,10 +405,10 @@ grant usage, select on all sequences in schema public to service_role;
 revoke all on function public.nombre_por_token(text) from public;
 grant execute on function public.nombre_por_token(text) to anon, authenticated;
 revoke all on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
-                       public.repartir_cartones(boolean), public.puede_cantar(text, int),
+                       public.repartir_cartones(boolean), public.cantar(text), public.votar_canto(uuid, boolean),
                        public.es_admin(), public.es_jurado(), public.resetear_pass(uuid) from public;
 grant execute on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
-                          public.repartir_cartones(boolean), public.puede_cantar(text, int),
+                          public.repartir_cartones(boolean), public.cantar(text), public.votar_canto(uuid, boolean),
                           public.es_admin(), public.es_jurado(), public.resetear_pass(uuid) to authenticated;
 grant execute on all functions in schema public to service_role;
 
@@ -315,6 +431,17 @@ create policy jurado_leer on public.jurado for select to authenticated using (tr
 drop policy if exists ganadores_leer on public.ganadores;
 create policy ganadores_leer on public.ganadores for select to authenticated using (true);
 
+drop policy if exists premios_leer on public.premios;
+create policy premios_leer on public.premios for select to authenticated using (true);
+
+-- Cantos: your own, accepted ones (winners) and, for jurors, the pending ones. Votes: jurors only.
+drop policy if exists cantos_leer on public.cantos;
+create policy cantos_leer on public.cantos for select to authenticated
+  using (jugador_id = auth.uid() or estado = 'ok' or public.es_jurado());
+
+drop policy if exists votos_leer on public.votos;
+create policy votos_leer on public.votos for select to authenticated using (public.es_jurado());
+
 -- Photos: own, validated (wall) or, for jurors, anything pending.
 drop policy if exists fotos_leer on public.fotos;
 create policy fotos_leer on public.fotos for select to authenticated
@@ -324,18 +451,13 @@ drop policy if exists fotos_subir on public.fotos;
 create policy fotos_subir on public.fotos for insert to authenticated
   with check (
     jugador_id = auth.uid()
-    and estado = 'pend'
-    and valorada_por is null
     and ruta like auth.uid()::text || '/%'
-    and (
-      exists (select 1 from cartones c where c.jugador_id = auth.uid() and reto = any (c.celdas))
-      or (reto in ('linea','bingo') and public.puede_cantar(reto, fila))
-    )
+    and exists (select 1 from cartones c where c.jugador_id = auth.uid() and reto = any (c.celdas))
   );
 
 drop policy if exists fotos_borrar on public.fotos;
 create policy fotos_borrar on public.fotos for delete to authenticated
-  using (jugador_id = auth.uid() and estado <> 'ok');
+  using (jugador_id = auth.uid());
 
 drop policy if exists reac_leer on public.reacciones;
 create policy reac_leer on public.reacciones for select to authenticated using (true);

@@ -14,7 +14,11 @@
   var L = { token: '', nombre: null, estado: '', error: '', ocupado: false }; // pantalla de entrada
 
   // Estado de juego cargado desde el servidor.
-  var S = { cargado: false, me: null, players: [], retos: {}, cartones: {}, jurado: [], photos: [], reacciones: {}, ganadores: { linea: null, bingo: null }, enlaces: {}, firma: '' };
+  var S = vacio();
+  function vacio() {
+    return { cargado: false, me: null, players: [], retos: {}, cartones: {}, jurado: [], photos: [], reacciones: {}, cantos: [], votos: [],
+      premios: { linea: { cupo: 3, premio: null }, bingo: { cupo: 1, premio: null } }, ganadores: { linea: [], bingo: [] }, enlaces: {}, firma: '' };
+  }
 
   /* ---------- utilidades ---------- */
   function esc(s) {
@@ -45,10 +49,13 @@
       API.get('retos', 'select=id,icono,titulo,franja,tipo,fijo,pista,desde'),
       API.get('cartones', 'select=jugador_id,celdas'),
       API.get('jurado', 'select=jugador_id'),
-      API.get('fotos', 'select=id,jugador_id,reto,fila,ruta,estado,creada,valorada_por&order=creada.asc'),
+      API.get('fotos', 'select=id,jugador_id,reto,ruta,estado,creada,valorada_por&order=creada.asc'),
       API.get('reacciones', 'select=foto_id,jugador_id,emoji'),
-      API.get('ganadores', 'select=tipo,foto_id'),
-      API.get('enlaces', 'select=jugador_id,token')
+      API.get('ganadores', 'select=canto_id,tipo,puesto,jugador_id&order=puesto.asc'),
+      API.get('enlaces', 'select=jugador_id,token'),
+      API.get('premios', 'select=tipo,cupo,premio'),
+      API.get('cantos', 'select=id,jugador_id,tipo,fila,estado,creada&order=creada.asc'),
+      API.get('votos', 'select=canto_id,jurado_id,ok')
     ]).then(function (r) {
       var jugadores = r[0], fotos = r[4];
       var yoFila = jugadores.filter(function (j) { return j.id === ses.user_id; })[0];
@@ -59,27 +66,26 @@
           me: { id: yoFila.id, name: yoFila.nombre, admin: yoFila.es_admin, cambio: yoFila.cambio_pass },
           players: jugadores.map(function (j) { return { id: j.id, name: j.nombre, admin: j.es_admin, cambio: j.cambio_pass }; }),
           retos: {}, cartones: {}, jurado: r[3].map(function (x) { return x.jugador_id; }), photos: [], reacciones: {},
-          ganadores: { linea: null, bingo: null }, enlaces: {}
+          cantos: r[9], votos: r[10], premios: { linea: { cupo: 3, premio: null }, bingo: { cupo: 1, premio: null } },
+          ganadores: { linea: [], bingo: [] }, enlaces: {}
         };
+        r[8].forEach(function (x) { nuevo.premios[x.tipo] = { cupo: x.cupo, premio: x.premio }; });
         r[1].forEach(function (x) { nuevo.retos[x.id] = x; });
         r[2].forEach(function (x) { nuevo.cartones[x.jugador_id] = x.celdas; });
         var nombre = {};
         nuevo.players.forEach(function (p) { nombre[p.id] = p.name; });
         nuevo.photos = fotos.map(function (f) {
-          return { id: f.id, playerId: f.jugador_id, retoId: f.reto, fila: f.fila, ruta: f.ruta, status: f.estado,
+          return { id: f.id, playerId: f.jugador_id, retoId: f.reto, ruta: f.ruta, status: f.estado,
             ts: Date.parse(f.creada), img: urls[f.ruta] ? urls[f.ruta].url : '', por: f.valorada_por ? nombre[f.valorada_por] : '' };
         });
         r[5].forEach(function (x) {
           var m = nuevo.reacciones[x.foto_id] || (nuevo.reacciones[x.foto_id] = {});
           (m[x.emoji] || (m[x.emoji] = [])).push(x.jugador_id);
         });
-        r[6].forEach(function (g) {
-          var f = nuevo.photos.filter(function (x) { return x.id === g.foto_id; })[0];
-          if (f) nuevo.ganadores[g.tipo] = f.playerId;
-        });
+        r[6].forEach(function (g) { nuevo.ganadores[g.tipo].push({ puesto: g.puesto, playerId: g.jugador_id }); });
         r[7].forEach(function (x) { nuevo.enlaces[x.jugador_id] = x.token; });
         // Huella de lo que se ve (sin las URLs firmadas, que cambian): evita repintar si nada ha cambiado.
-        nuevo.firma = JSON.stringify([nuevo.me, nuevo.players, nuevo.cartones, nuevo.jurado, nuevo.reacciones, nuevo.ganadores,
+        nuevo.firma = JSON.stringify([nuevo.me, nuevo.players, nuevo.cartones, nuevo.jurado, nuevo.reacciones, nuevo.ganadores, nuevo.cantos, nuevo.votos, nuevo.premios,
           nuevo.photos.map(function (f) { return [f.id, f.status, f.por]; })]);
         var cambio = nuevo.firma !== S.firma;
         S = nuevo;
@@ -92,13 +98,23 @@
   function reto(id) {
     return S.retos[String(id)] || { id: String(id), icono: '❔', titulo: 'Reto', franja: '', tipo: 'individual', pista: '' };
   }
-  function esCanto(id) { return id === 'linea' || id === 'bingo'; }
+  var NOMBRE_CANTO = { linea: 'Línea', bingo: 'Bingo' };
+  function quedan(tipo) { return S.premios[tipo].cupo - S.ganadores[tipo].length; }
+  function yaGane(tipo, pid) { return S.ganadores[tipo].some(function (g) { return g.playerId === pid; }); }
+  function cantosDe(pid, tipo) { return S.cantos.filter(function (k) { return k.jugador_id === pid && k.tipo === tipo; }); }
+  function cantoPend(pid, tipo) { return cantosDe(pid, tipo).filter(function (k) { return k.estado === 'pend'; })[0] || null; }
+  function ultimoCanto(pid, tipo) { var l = cantosDe(pid, tipo); return l.length ? l[l.length - 1] : null; }
+  function votosDe(cid) { return S.votos.filter(function (v) { return v.canto_id === cid; }); }
+  function cantosPorVotar(pid) {
+    return S.cantos.filter(function (k) {
+      return k.estado === 'pend' && k.jugador_id !== pid && !votosDe(k.id).some(function (v) { return v.jurado_id === pid; });
+    });
+  }
   function carton(pid) { return S.cartones[pid] || null; }
   function estadoReto(pid, rid) {
-    var orden = { ok: 3, pend: 2, ko: 1 }, mejor = null;
+    var mejor = null;
     S.photos.forEach(function (f) {
-      if (f.playerId !== pid || f.retoId !== rid) return;
-      if (!mejor || orden[f.status] > orden[mejor.status] || (orden[f.status] === orden[mejor.status] && f.ts > mejor.ts)) mejor = f;
+      if (f.playerId === pid && f.retoId === rid && (!mejor || f.ts > mejor.ts)) mejor = f;
     });
     return mejor;
   }
@@ -135,23 +151,35 @@
 
   function listaPendientes(excluirPid) {
     var pend = pendientes(excluirPid).sort(function (a, b) { return (valorable(b) ? 1 : 0) - (valorable(a) ? 1 : 0); });
-    if (!pend.length) return '<div class="vacio">No hay fotos por validar. Descansa un rato.</div>';
+    if (!pend.length) return '<div class="vacio">No hay nada por valorar. Descansa un rato.</div>';
     return '<div class="muro">' + pend.map(function (f) {
-      var r = reto(f.retoId), pid = f.playerId, rev = '', libre = valorable(f);
-      if (r.tipo === 'canto') {
-        var c = carton(pid) || [], ids = r.id === 'linea' ? LINEAS[f.fila || 0].map(function (i) { return c[i]; }) : c;
-        rev = '<p class="rev-tit">Revisa ' + (r.id === 'linea' ? 'las 3 fotos de la fila' : 'las 9 fotos del cartón') + '. Toca una para verla grande.</p><div class="rev">' +
-          ids.map(function (rid) {
-            var g = estadoReto(pid, rid);
-            return g ? '<button class="rev-foto" data-acc="ver" data-fid="' + esc(g.id) + '"><img src="' + esc(g.img) + '" alt=""><span>' + esc(reto(rid).titulo) + '</span></button>' : '';
-          }).join('') + '</div>';
-      }
+      var r = reto(f.retoId), libre = valorable(f);
       return '<figure class="foto-card"><img src="' + esc(f.img) + '" alt="' + esc(r.titulo) + '">' +
-        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small>' + rev + '</figcaption>' +
+        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small></figcaption>' +
         (libre
           ? '<div class="acc"><button class="btn mini" data-acc="aprobar" data-id="' + esc(f.id) + '">Validar</button>' +
             '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div>'
           : '<p class="bloqueo">🔒 Se puede valorar desde ' + desdeTxt(r) + '</p>') + '</figure>';
+    }).join('') + '</div>';
+  }
+  // Cantos pendientes de votar: el jurado revisa las fotos validadas del jugador (3 de la fila o las 9).
+  function listaCantos(pid) {
+    var lista = S.cantos.filter(function (k) { return k.estado === 'pend' && k.jugador_id !== pid; });
+    if (!lista.length) return '';
+    return '<h3 class="sec">Cantos por votar</h3><div class="muro">' + lista.map(function (k) {
+      var c = carton(k.jugador_id) || [], ids = k.tipo === 'linea' ? LINEAS[k.fila || 0].map(function (i) { return c[i]; }) : c;
+      var vs = votosDe(k.id), si = vs.filter(function (v) { return v.ok; }).length, no = vs.length - si;
+      var mio = vs.filter(function (v) { return v.jurado_id === pid; })[0];
+      return '<figure class="foto-card canto"><figcaption><b>' + (k.tipo === 'linea' ? '🎯 ¡Línea!' : '🏁 ¡Bingo!') + ' de ' + esc(jugador(k.jugador_id).name) + '</b>' +
+        '<p class="rev-tit">Revisa ' + (k.tipo === 'linea' ? 'las 3 fotos de la fila ' + ((k.fila || 0) + 1) : 'las 9 fotos del cartón') + '. Toca una para verla grande. Hacen falta 2 votos a favor.</p><div class="rev">' +
+        ids.map(function (rid) {
+          var g = estadoReto(k.jugador_id, rid);
+          return g ? '<button class="rev-foto" data-acc="ver" data-fid="' + esc(g.id) + '"><img src="' + esc(g.img) + '" alt=""><span>' + esc(reto(rid).titulo) + '</span></button>' : '';
+        }).join('') + '</div><small>Votos: ' + si + ' a favor · ' + no + ' en contra</small></figcaption>' +
+        (mio
+          ? '<p class="bloqueo">Has votado ' + (mio.ok ? 'a favor' : 'en contra') + '. Esperando al resto del jurado.</p>'
+          : '<div class="acc"><button class="btn mini" data-acc="votar" data-id="' + esc(k.id) + '" data-ok="1">Es válido</button>' +
+            '<button class="btn mini fantasma" data-acc="votar" data-id="' + esc(k.id) + '" data-ok="0">No es válido</button></div>') + '</figure>';
     }).join('') + '</div>';
   }
 
@@ -219,18 +247,21 @@
 
   /* ----- juego ----- */
   function banner() {
-    var g = S.ganadores, t = '';
-    if (g.linea) t += '<strong>Línea:</strong> ' + esc(jugador(g.linea).name) + ' 🏆 ';
-    if (g.bingo) t += '<strong>Bingo:</strong> ' + esc(jugador(g.bingo).name) + ' 🏆';
-    if (!t) t = '<strong>Sin línea ni bingo todavía.</strong> Gana quien lo cante primero y el jurado lo valide.';
-    return '<div class="aviso">' + t + '</div>';
+    function bloque(tipo, titulo) {
+      var g = S.ganadores[tipo], q = quedan(tipo), pr = S.premios[tipo].premio;
+      var t = '<strong>' + titulo + '</strong> · ' + (q > 0 ? (q === 1 ? 'queda 1' : 'quedan ' + q) + ' de ' + S.premios[tipo].cupo : 'todos repartidos') +
+        ' · ' + (pr ? esc(pr) : 'premio por determinar');
+      if (g.length) t += '<br>' + g.map(function (x) { return x.puesto + 'º ' + esc(jugador(x.playerId).name) + ' 🏆'; }).join(' · ');
+      return '<div>' + t + '</div>';
+    }
+    return '<div class="aviso">' + bloque('linea', 'Líneas') + bloque('bingo', 'Bingo') + '</div>';
   }
 
   function vCarton() {
     var p = yo(), c = carton(p.id), n = sellos(p.id), lineas = lineasCompletas(p.id);
     var h = '';
     if (esJurado(p.id)) {
-      var np = pendientes(p.id).filter(valorable).length;
+      var np = pendientes(p.id).filter(valorable).length + cantosPorVotar(p.id).length;
       h += '<a class="banner-jurado" href="#/jurado"><span class="ico" aria-hidden="true">⚖️</span><span><b>' + (p.admin ? 'Eres del jurado, como admin' : 'Te ha tocado jurado') + '</b><br>' +
         (np ? np + (np === 1 ? ' foto espera' : ' fotos esperan') + ' tu veredicto' : 'No hay fotos que valorar ahora mismo') + '</span></a>';
     }
@@ -242,7 +273,7 @@
     }
     h += '<article class="ticket"><div class="ticket-top"><div><h2>Cartón de ' + esc(p.name) + '</h2><small>Quedada de Navidad · 26 dic 2026</small></div>' +
       '<div class="serie" aria-label="Número de cartón">Nº ' + String(numero(p.id)).padStart(3, '0') + '</div></div><div class="perf"></div>' +
-      '<div class="progreso"><span>' + n + ' de 9 sellos validados</span><span>Línea = una fila horizontal</span></div><div class="grid">';
+      '<div class="progreso"><span>' + n + ' de 9 retos hechos</span><span>Línea = una fila horizontal</span></div><div class="grid">';
     c.forEach(function (rid, i) {
       if (i % 3 === 0) {
         var k = i / 3, hecha = lineas.some(function (l) { return l[0] === i; });
@@ -255,7 +286,7 @@
       if (f) {
         cls += ' ' + f.status + ' conFoto';
         sello = '<span class="sello">' + { ok: 'OK', pend: 'En revisión', ko: 'Repite' }[f.status] + '</span>';
-        etiqueta = { ok: ', validado', pend: ', pendiente de validar', ko: ', rechazado' }[f.status];
+        etiqueta = { ok: ', hecho', pend: ', pendiente del jurado', ko: ', rechazado' }[f.status];
       }
       h += '<button class="' + cls + '" data-acc="reto" data-id="' + esc(rid) + '" aria-label="' + esc(r.titulo + etiqueta) + '">' +
         (f && f.img ? '<span class="foto" style="' + urlBg(f.img) + '"></span>' : '') +
@@ -264,15 +295,13 @@
     });
     h += '</div></article><div class="acciones">';
     function botonCanto(tipo, texto) {
-      var f = estadoReto(p.id, tipo);
-      if (f && f.status === 'pend') return '<button class="btn oro" disabled>' + texto[1] + '</button>';
-      return '<button class="btn oro" data-acc="reto" data-id="' + tipo + '">' + (f && f.status === 'ko' ? texto[2] : texto[0]) + '</button>';
+      if (yaGane(tipo, p.id) || quedan(tipo) <= 0) return '';
+      if (cantoPend(p.id, tipo)) return '<button class="btn oro" disabled>' + texto[1] + '</button>';
+      var ult = ultimoCanto(p.id, tipo), nota = ult && ult.estado === 'ko' ? '<p class="nota">El jurado no aceptó tu último canto. Puedes volver a cantar.</p>' : '';
+      return '<button class="btn oro" data-acc="cantar" data-tipo="' + tipo + '">' + texto[0] + '</button>' + nota;
     }
-    if (n === 9 && !S.ganadores.bingo) {
-      h += botonCanto('bingo', ['¡Cantar bingo con foto!', 'Bingo enviado. El jurado lo está mirando', 'Repetir la foto del bingo']);
-    } else if (lineas.length && !S.ganadores.linea) {
-      h += botonCanto('linea', ['¡Cantar línea con foto!', 'Línea enviada. El jurado la está mirando', 'Repetir la foto de la línea']);
-    }
+    if (n === 9) h += botonCanto('bingo', ['¡Cantar bingo!', 'Bingo cantado. El jurado lo está mirando']);
+    if (lineas.length) h += botonCanto('linea', ['¡Cantar línea!', 'Línea cantada. El jurado la está mirando']);
     h += '</div>';
     return h;
   }
@@ -288,17 +317,17 @@
 
   function vMuro() {
     var oks = S.photos.filter(function (f) { return f.status === 'ok'; }).sort(function (a, b) { return b.ts - a.ts; });
-    if (!oks.length) return '<div class="vacio">Aún no hay fotos validadas. La primera la sube alguien con valor.</div>';
+    if (!oks.length) return '<div class="vacio">Aún no hay fotos. La primera la sube alguien con valor.</div>';
     return '<div class="muro">' + oks.map(function (f) {
       var r = reto(f.retoId);
       return '<figure class="foto-card"><img src="' + esc(f.img) + '" alt="' + esc(r.titulo) + '" loading="lazy">' +
-        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + (f.por ? '<br><small>Validada por ' + esc(f.por) + '</small>' : '') + '</figcaption>' + barraReacciones(f) + '</figure>';
+        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + (f.por ? '<br><small>Valorada por ' + esc(f.por) + '</small>' : '') + '</figcaption>' + barraReacciones(f) + '</figure>';
     }).join('') + '</div>';
   }
 
   function vJurado() {
-    return '<section class="panel"><h2>Eres del jurado</h2><p>Sois 3: dos jugadores sorteados y el admin. Valida las fotos de tus colegas, también las de línea y bingo. Las tuyas las valida otra persona del jurado. Si dudas, rechaza y que la repitan.</p></section>' +
-      listaPendientes(yo().id);
+    return '<section class="panel"><h2>Eres del jurado</h2><p>Sois 3: dos jugadores sorteados y el admin. Las fotos se aceptan al subirlas. Tu trabajo: votar los cantos de línea y bingo (hacen falta 2 de 3) y, más tarde, la foto del pibón. No votas tus propios cantos.</p></section>' +
+      listaCantos(yo().id) + (S.cantos.some(function (k) { return k.estado === 'pend' && k.jugador_id !== yo().id; }) ? '<h3 class="sec">Fotos por valorar</h3>' : '') + listaPendientes(yo().id);
   }
 
   function vAdmin() {
@@ -413,7 +442,7 @@
   function salir() {
     clearInterval(poll);
     return API.salir().then(function () {
-      S = { cargado: false, me: null, players: [], retos: {}, cartones: {}, jurado: [], photos: [], reacciones: {}, ganadores: { linea: null, bingo: null }, enlaces: {}, firma: '' };
+      S = vacio();
       L = { token: '', nombre: null, estado: '', error: '', ocupado: false };
       msgPass = '';
       location.hash = '#/entrar'; render();
@@ -428,16 +457,14 @@
       '<h3>' + r.icono + ' ' + esc(r.titulo) + '</h3><p class="pista">' + esc(r.pista) + '</p>' +
       (r.desde ? '<p class="pista"><b>El jurado lo valora desde ' + desdeTxt(r) + '.</b> Puedes subir la foto antes.</p>' : '');
     if (f && f.status !== 'ko') {
-      h += '<img class="vista" src="' + esc(f.img) + '" alt="Tu foto"><p class="pista"><b>' + (f.status === 'ok' ? 'Validada por el jurado.' : 'Enviada. Esperando al jurado.') + '</b></p>' +
-        '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div>';
-    } else {
-      if (f && f.status === 'ko') h += '<p class="pista"><b>El jurado la ha rechazado.</b> Sube otra.</p>';
-      h += '<img class="vista" id="vista" alt="" hidden>' +
-        '<div class="origen"><label class="btn oro">📷 Hacer foto<input class="archivo" type="file" accept="image/*" capture="environment"></label>' +
-        '<label class="btn fantasma">🖼️ Fototeca<input class="archivo" type="file" accept="image/*"></label></div>' +
-        '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cancelar</button>' +
-        '<button class="btn" id="enviar" data-acc="enviar" data-id="' + esc(id) + '" disabled>Enviar foto</button></div>';
+      h += '<img class="vista" src="' + esc(f.img) + '" alt="Tu foto"><p class="pista"><b>' + (f.status === 'ok' ? 'Hecho.' : 'Enviada. Esperando al jurado.') + '</b> ¿No ha salido bien? Puedes repetirla.</p>';
+    } else if (f) {
+      h += '<p class="pista"><b>El jurado la ha rechazado.</b> Sube otra.</p>';
     }
+    h += '<img class="vista" id="vista" alt="" hidden>' +
+      '<div class="origen"><label class="btn oro">' + (f ? '📷 Repetir foto' : '📷 Subir foto') + '<input class="archivo" type="file" accept="image/*"></label></div>' +
+      '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cancelar</button>' +
+      '<button class="btn" id="enviar" data-acc="enviar" data-id="' + esc(id) + '" disabled>Enviar foto</button></div>';
     $modal.innerHTML = h + '</div>';
     if (!$modal.open) $modal.showModal();
   }
@@ -486,15 +513,26 @@
       if (!imgPendiente || subiendo) return;
       subiendo = true;
       var btn = document.getElementById('enviar'); btn.disabled = true; btn.textContent = 'Enviando…';
-      var fila = id === 'linea' ? Math.max(0, LINEAS.indexOf(lineasCompletas(p.id)[0])) : null;
-      var viejas = S.photos.filter(function (f) { return f.playerId === p.id && f.retoId === id && f.status === 'ko'; });
+      var viejas = S.photos.filter(function (f) { return f.playerId === p.id && f.retoId === id; });
       var ruta = p.id + '/' + uuid() + '.jpg';
-      var paso = viejas.length ? API.del('fotos', 'jugador_id=eq.' + p.id + '&reto=eq.' + encodeURIComponent(id) + '&estado=eq.ko') : Promise.resolve();
+      var paso = viejas.length ? API.del('fotos', 'jugador_id=eq.' + p.id + '&reto=eq.' + encodeURIComponent(id)) : Promise.resolve();
       paso.then(function () { return API.subir(ruta, imgPendiente.blob); })
-        .then(function () { return API.post('fotos', { jugador_id: p.id, reto: id, fila: fila, ruta: ruta }); })
+        .then(function () { return API.post('fotos', { jugador_id: p.id, reto: id, ruta: ruta }); })
         .then(function () { viejas.forEach(function (v) { API.borrarObjeto(v.ruta); }); return cargarTodo(); })
-        .then(function () { subiendo = false; $modal.close(); render(true); toast('Foto enviada. Ahora toca esperar al jurado.'); })
+        .then(function () { subiendo = false; $modal.close(); render(true); toast(reto(id).desde ? 'Foto enviada. La valorará el jurado.' : 'Foto subida.'); })
         .catch(function (e) { subiendo = false; toast(traducir(e)); btn.disabled = false; btn.textContent = 'Enviar foto'; });
+    },
+    cantar: function (d) {
+      API.rpc('cantar', { p_tipo: d.tipo })
+        .then(function () { return recargar('¡' + NOMBRE_CANTO[d.tipo] + ' cantada! El jurado la está revisando.'); })
+        .catch(function (e) { toast(traducir(e)); recargar().catch(function () {}); });
+    },
+    votar: function (d) {
+      API.rpc('votar_canto', { p_canto: d.id, p_ok: d.ok === '1' })
+        .then(function (estado) {
+          return recargar(estado === 'ok' ? 'Canto aceptado: ya tiene ganador.' : estado === 'ko' ? 'Canto rechazado.' : 'Voto registrado.');
+        })
+        .catch(function (e) { toast(traducir(e)); recargar().catch(function () {}); });
     },
     aprobar: function (d) { valorar(d.id, true); },
     rechazar: function (d) { valorar(d.id, false); },
