@@ -42,6 +42,8 @@ window.NPG = {
     { id: 's8', concepto: 'Bingo falso', eur: 2 }
   ],
 
+  // Los 22 jugadores incluyen al admin: tiene cartón como el resto, más funciones especiales.
+  ADMIN: 'Adri',
   JUGADORES: ['Dani', 'Marcos', 'Raúl', 'Javi', 'Nacho', 'Pablo', 'Sergio', 'Álvaro', 'Iván', 'Rubén', 'Fer',
     'Toni', 'Edu', 'Jesús', 'Carlos', 'David', 'Óscar', 'Víctor', 'Manu', 'Luis', 'Adri', 'Jota']
 };

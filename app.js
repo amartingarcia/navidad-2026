@@ -11,7 +11,8 @@
   var $modal = document.getElementById('modal');
   var $toast = document.getElementById('toast');
   var state;
-  var adminTab = 'pend';
+  var adminTab = 'sorteo';
+  var juradoTab = 'fotos';
   var imgPendiente = null;
 
   /* ---------- utilidades ---------- */
@@ -62,7 +63,7 @@
     var jugadores = N.JUGADORES.map(function (n, i) {
       var t = token(i + 1);
       return {
-        id: i + 1, name: n, token: t, pass: 'npg-' + t.slice(0, 4), cambiada: i < 8,
+        id: i + 1, name: n, admin: n === N.ADMIN, token: t, pass: 'npg-' + t.slice(0, 4), cambiada: i < 8,
         user: n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       };
     });
@@ -92,15 +93,22 @@
       var raw = localStorage.getItem(KEY);
       if (raw) {
         var s = JSON.parse(raw);
-        if (!s.jurado || s.jurado.length !== JURADO_JUGADORES) s.jurado = sortear(s.players); // datos guardados con otro tamaño de jurado
+        s.players.forEach(function (p) { p.admin = p.name === N.ADMIN; });
+        var adm = s.players.filter(function (p) { return p.admin; })[0];
+        if (s.session && s.session.role === 'admin') s.session = adm ? { role: 'jugador', playerId: adm.id } : null;
+        // datos guardados con otro tamaño de jurado, o con el admin sorteado como jugador
+        if (!s.jurado || s.jurado.length !== JURADO_JUGADORES || (adm && s.jurado.indexOf(adm.id) !== -1)) {
+          s.jurado = sortear(s.players);
+          localStorage.setItem(KEY, JSON.stringify(s)); // fija el sorteo para que no cambie al recargar
+        }
         return s;
       }
     } catch (e) { /* sin almacenamiento: sigue en memoria */ }
     return semilla();
   }
-  // Jurado: 2 jugadores al azar (el admin es el tercer miembro, fijo).
+  // Jurado: 2 jugadores al azar sin contar al admin, que siempre está dentro (3 en total).
   function sortear(jugadores) {
-    return mezclar(jugadores.map(function (p) { return p.id; }), Math.random).slice(0, JURADO_JUGADORES);
+    return mezclar(jugadores.filter(function (p) { return !p.admin; }).map(function (p) { return p.id; }), Math.random).slice(0, JURADO_JUGADORES);
   }
   function guardar() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -134,8 +142,9 @@
   }
   function jugador(id) { return state.players.filter(function (p) { return p.id === id; })[0]; }
   function yo() { return state.session && state.session.role === 'jugador' ? jugador(state.session.playerId) : null; }
-  function soyAdmin() { return state.session && state.session.role === 'admin'; }
-  function esJurado(pid) { return state.jurado.indexOf(pid) !== -1; }
+  function soyAdmin() { var p = yo(); return !!p && !!p.admin; }
+  function admin() { return state.players.filter(function (p) { return p.admin; })[0]; }
+  function esJurado(pid) { var p = jugador(pid); return state.jurado.indexOf(pid) !== -1 || !!(p && p.admin); }
   function soyJurado() { var p = yo(); return !!p && esJurado(p.id); }
   function pendientes(excluirPid) {
     return state.photos.filter(function (f) { return f.status === 'pend' && f.playerId !== excluirPid; })
@@ -152,6 +161,22 @@
         '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div></figure>';
     }).join('') + '</div>';
   }
+  function cantosPendientes(excluirPid) {
+    return state.claims.filter(function (c) { return c.estado === 'pend' && c.playerId !== excluirPid; });
+  }
+  function listaCantos(excluirPid) {
+    var cs = state.claims.filter(function (c) { return c.playerId !== excluirPid; }).sort(function (a, b) { return b.ts - a.ts; });
+    if (!cs.length) return '<div class="vacio">Nadie ha cantado todavía.</div>';
+    return cs.map(function (c) {
+      var p = jugador(c.playerId), pid = p.id;
+      var mini = carton(pid).map(function (rid) { var f = estadoReto(pid, rid); return f ? '<img src="' + f.img + '" alt="' + esc(reto(rid).titulo) + '">' : ''; }).join('');
+      return '<section class="panel"><h3>' + (c.tipo === 'bingo' ? 'Bingo' : 'Línea') + ' de ' + esc(p.name) + ' <span class="etq ' + c.estado + '">' +
+        { pend: 'Por revisar', ok: 'Válido', ko: 'Anulado' }[c.estado] + '</span></h3><p>Cantado a las ' + hora(c.ts) + (c.por ? ' · Resuelto por ' + esc(c.por) : '') + '</p><div class="miniaturas">' + mini + '</div>' +
+        (c.estado === 'pend' ? '<div class="acciones"><button class="btn oro" data-acc="resolver" data-id="' + c.id + '" data-ok="1">Es válido</button>' +
+          '<button class="btn fantasma" data-acc="resolver" data-id="' + c.id + '" data-ok="0">Anular' + (c.tipo === 'bingo' ? ' (2 € de multa)' : '') + '</button></div>' : '') + '</section>';
+    }).join('');
+  }
+  function nombreJurado() { return yo() ? yo().name : ''; }
   function dias() {
     var d = Math.ceil((new Date(N.EVENTO.fecha + 'T00:00:00') - new Date()) / 86400000);
     return d;
@@ -168,8 +193,8 @@
   }
   function nav(ruta) {
     var items = [['carton', '🎟️', 'Cartón'], ['muro', '📸', 'Muro']];
-    if (soyAdmin()) items = [['admin', '🛠️', 'Admin'], ['muro', '📸', 'Muro']];
-    else if (soyJurado()) items.splice(1, 0, ['jurado', '⚖️', 'Jurado']);
+    if (soyJurado()) items.splice(1, 0, ['jurado', '⚖️', 'Jurado']);
+    if (soyAdmin()) items.splice(items.length - 1, 0, ['admin', '🛠️', 'Admin']);
     return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + items.map(function (it) {
       return '<a href="#/' + it[0] + '"' + (ruta === it[0] ? ' aria-current="page"' : '') + '><span aria-hidden="true">' + it[1] + '</span>' + it[2] + '</a>';
     }).join('') + '<a href="#/salir" data-acc="salir"><span aria-hidden="true">🚪</span>Salir</a></div></nav>';
@@ -198,7 +223,7 @@
     h += '<section class="panel"><h3>Probar la PoC</h3><p>Sin backend: los datos son de ejemplo y se guardan solo en este navegador.</p>' +
       '<div class="acciones"><button class="btn oro" data-acc="demoJugador">Entrar como Dani (jugador)</button>' +
       '<button class="btn fantasma" data-acc="demoJurado">Entrar como jurado (' + esc(jugador(state.jurado[0]).name) + ')</button>' +
-      '<button class="btn fantasma" data-acc="demoAdmin">Entrar como admin</button>' +
+      '<button class="btn fantasma" data-acc="demoAdmin">Entrar como admin (' + esc(admin().name) + ')</button>' +
       '<button class="btn fantasma" data-acc="reiniciar">Reiniciar datos de ejemplo</button></div></section></main>';
     return h;
   }
@@ -215,9 +240,9 @@
     var p = yo(), c = carton(p.id), n = sellos(p.id), lineas = lineasCompletas(p.id);
     var h = '';
     if (esJurado(p.id)) {
-      var np = pendientes(p.id).length;
-      h += '<a class="banner-jurado" href="#/jurado"><span class="ico" aria-hidden="true">⚖️</span><span><b>Te ha tocado jurado</b><br>' +
-        (np ? np + (np === 1 ? ' foto espera' : ' fotos esperan') + ' tu veredicto' : 'No hay fotos por validar ahora mismo') + '</span></a>';
+      var np = pendientes(p.id).length + cantosPendientes(p.id).length;
+      h += '<a class="banner-jurado" href="#/jurado"><span class="ico" aria-hidden="true">⚖️</span><span><b>' + (p.admin ? 'Eres del jurado, como admin' : 'Te ha tocado jurado') + '</b><br>' +
+        (np ? np + (np === 1 ? ' cosa espera' : ' cosas esperan') + ' tu veredicto' : 'No hay nada por validar ahora mismo') + '</span></a>';
     }
     h += banner();
     h += '<article class="ticket"><div class="ticket-top"><div><h2>Cartón de ' + esc(p.name) + '</h2><small>Quedada de Navidad · 26 dic 2026</small></div>' +
@@ -262,38 +287,28 @@
   }
 
   function vJurado() {
-    var p = yo();
-    return '<section class="panel"><h2>Eres del jurado</h2><p>Valida las fotos de tus colegas. Las tuyas las valida otra persona del jurado o el admin. Si dudas, rechaza y que la repitan.</p></section>' +
-      listaPendientes(p.id);
+    var p = yo(), pid = p ? p.id : null;
+    var nf = pendientes(pid).length, nc = cantosPendientes(pid).length;
+    var tabs = [['fotos', 'Fotos' + (nf ? ' (' + nf + ')' : '')], ['cantos', 'Cantos' + (nc ? ' (' + nc + ')' : '')]];
+    var h = '<section class="panel"><h2>Eres del jurado</h2><p>Sois 3: dos jugadores sorteados y el admin. Valida las fotos y los cantos de línea y bingo de tus colegas. Lo tuyo lo valida otra persona del jurado. Si dudas, rechaza y que lo repitan.</p></section>' +
+      '<div class="segmento" role="group" aria-label="Qué revisar">' + tabs.map(function (t) {
+        return '<button data-acc="jtab" data-tab="' + t[0] + '" aria-pressed="' + (juradoTab === t[0]) + '">' + t[1] + '</button>';
+      }).join('') + '</div>';
+    return h + (juradoTab === 'cantos' ? listaCantos(pid) : listaPendientes(pid));
   }
 
   function vAdmin() {
-    var tabs = [['pend', 'Fotos'], ['cantos', 'Cantos'], ['jurado', 'Jurado'], ['multas', 'Multas'], ['enlaces', 'Enlaces']];
+    var tabs = [['sorteo', 'Sorteo'], ['multas', 'Multas'], ['enlaces', 'Enlaces']];
     var h = '<div class="segmento" role="group" aria-label="Secciones del admin">' + tabs.map(function (t) {
       return '<button data-acc="tab" data-tab="' + t[0] + '" aria-pressed="' + (adminTab === t[0]) + '">' + t[1] + '</button>';
     }).join('') + '</div>';
 
-    if (adminTab === 'pend') h += listaPendientes(null);
-
-    if (adminTab === 'jurado') {
-      h += '<section class="panel"><h3>Jurado de la quedada</h3><p>Dos jugadores al azar, más tú como administrador (sois 3 en total). Ven un banner en su cartón y pueden validar las fotos de los demás (nunca las suyas).</p>' +
+    if (adminTab === 'sorteo') {
+      h += '<section class="panel"><h3>Jurado de la quedada</h3><p>Dos jugadores al azar, más tú como admin (sois 3 en total). Los tres validan fotos y cantos de los demás, nunca los suyos. Los elegidos ven un banner en su cartón.</p>' +
         state.jurado.map(function (id) {
-          return '<div class="fila"><div><b>' + esc(jugador(id).name) + '</b><small>Jurado</small></div><span class="etq ok">En el jurado</span></div>';
-        }).join('') + '<div class="fila"><div><b>Admin</b><small>Siempre en el jurado</small></div><span class="etq ok">En el jurado</span></div>' +
+          return '<div class="fila"><div><b>' + esc(jugador(id).name) + '</b><small>Jugador sorteado</small></div><span class="etq ok">En el jurado</span></div>';
+        }).join('') + '<div class="fila"><div><b>' + esc(admin().name) + '</b><small>Admin, siempre en el jurado</small></div><span class="etq ok">En el jurado</span></div>' +
         '<button class="btn oro ancho" style="margin-top:12px" data-acc="sortear">Sortear de nuevo</button></section>';
-    }
-
-    if (adminTab === 'cantos') {
-      var cs = state.claims.slice().sort(function (a, b) { return b.ts - a.ts; });
-      if (!cs.length) return h + '<div class="vacio">Nadie ha cantado todavía.</div>';
-      h += cs.map(function (c) {
-        var p = jugador(c.playerId), pid = p.id;
-        var mini = carton(pid).map(function (rid) { var f = estadoReto(pid, rid); return f ? '<img src="' + f.img + '" alt="' + esc(reto(rid).titulo) + '">' : ''; }).join('');
-        return '<section class="panel"><h3>' + (c.tipo === 'bingo' ? 'Bingo' : 'Línea') + ' de ' + esc(p.name) + ' <span class="etq ' + c.estado + '">' +
-          { pend: 'Por revisar', ok: 'Válido', ko: 'Anulado' }[c.estado] + '</span></h3><p>Cantado a las ' + hora(c.ts) + '</p><div class="miniaturas">' + mini + '</div>' +
-          (c.estado === 'pend' ? '<div class="acciones"><button class="btn oro" data-acc="resolver" data-id="' + c.id + '" data-ok="1">Es válido</button>' +
-            '<button class="btn fantasma" data-acc="resolver" data-id="' + c.id + '" data-ok="0">Anular' + (c.tipo === 'bingo' ? ' (2 € de multa)' : '') + '</button></div>' : '') + '</section>';
-      }).join('');
     }
 
     if (adminTab === 'multas') {
@@ -332,8 +347,7 @@
     }
     nieve(false);
     var nombre = r.nombre;
-    if (soyAdmin() && (nombre === '' || nombre === 'carton')) nombre = 'admin';
-    if (!soyAdmin() && (nombre === '' || nombre === 'admin')) nombre = 'carton';
+    if (nombre === '' || (nombre === 'admin' && !soyAdmin())) nombre = 'carton';
     if (nombre === 'jurado' && !soyJurado()) nombre = 'carton';
     var vistas = { carton: vCarton, muro: vMuro, admin: vAdmin, jurado: vJurado };
     html = cabecera() + (vistas[nombre] || vCarton)() + nav(nombre);
@@ -399,6 +413,7 @@
     demoJurado: function () { state.session = { role: 'jugador', playerId: state.jurado[0] }; guardar(); location.hash = '#/carton'; render(); },
     resolver: function (d) {
       var c = state.claims.filter(function (x) { return x.id === d.id; })[0];
+      c.por = nombreJurado();
       if (d.ok === '1') {
         c.estado = 'ok';
         if (!state.ganadores[c.tipo]) state.ganadores[c.tipo] = c.playerId;
@@ -409,6 +424,7 @@
       guardar(); render();
     },
     tab: function (d) { adminTab = d.tab; render(); },
+    jtab: function (d) { juradoTab = d.tab; render(); },
     copiar: function (d) {
       var url = location.href.split('#')[0] + '#/entrar/' + d.token;
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -416,12 +432,12 @@
       } else { toast(url); }
     },
     demoJugador: function () { state.session = { role: 'jugador', playerId: 1 }; guardar(); location.hash = '#/carton'; render(); },
-    demoAdmin: function () { state.session = { role: 'admin', playerId: null }; guardar(); location.hash = '#/admin'; render(); },
+    demoAdmin: function () { state.session = { role: 'jugador', playerId: admin().id }; guardar(); location.hash = '#/carton'; render(); },
     reiniciar: function () { state = semilla(); guardar(); toast('Datos de ejemplo restaurados.'); render(); },
     salir: function () { /* lo resuelve el router */ }
   };
   function cambiarFoto(id, estado) {
-    var quien = soyAdmin() ? 'Admin' : (yo() ? yo().name : '');
+    var quien = nombreJurado();
     state.photos.forEach(function (f) { if (f.id === id) { f.status = estado; f.por = quien; } });
     guardar(); render();
   }
@@ -489,6 +505,6 @@
   }
 
   state = cargar();
-  if (!location.hash) location.hash = state.session ? (soyAdmin() ? '#/admin' : '#/carton') : '#/entrar';
+  if (!location.hash) location.hash = state.session ? '#/carton' : '#/entrar';
   render();
 })();
