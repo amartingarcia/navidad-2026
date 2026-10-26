@@ -209,9 +209,9 @@
   }
   function vClave() {
     return entrada('<form class="panel" data-form="clave"><h2>Hola, ' + esc(S.me.name) + '</h2>' +
-      '<p>Elige tu contraseña. Tiene que ser distinta de la inicial y tener al menos 8 caracteres.</p>' +
-      '<label class="campo"><span>Contraseña nueva</span><input name="a" type="password" minlength="8" autocomplete="new-password" required></label>' +
-      '<label class="campo"><span>Repite la contraseña</span><input name="b" type="password" minlength="8" autocomplete="new-password" required></label>' + errorL() +
+      '<p>Elige tu contraseña. Tiene que ser distinta de la inicial y tener al menos 4 caracteres.</p>' +
+      '<label class="campo"><span>Contraseña nueva</span><input name="a" type="password" minlength="4" autocomplete="new-password" required></label>' +
+      '<label class="campo"><span>Repite la contraseña</span><input name="b" type="password" minlength="4" autocomplete="new-password" required></label>' + errorL() +
       '<button class="btn oro ancho" type="submit"' + (L.ocupado ? ' disabled' : '') + '>' + (L.ocupado ? 'Guardando…' : 'Guardar y entrar') + '</button>' +
       '<button class="btn fantasma ancho" type="button" data-acc="salirYa" style="margin-top:10px">Salir</button></form>');
   }
@@ -386,7 +386,7 @@
     var m = e && e.message || '';
     if (e && e.status === undefined) return msgError(e);
     if (/different from the old/i.test(m)) return 'Tiene que ser distinta de la contraseña actual.';
-    if (/at least|weak|pwned|easy to guess/i.test(m)) return 'Esa contraseña no es válida: usa 8 o más caracteres y que no sea muy típica.';
+    if (/at least|weak|pwned|easy to guess/i.test(m)) return 'Esa contraseña no es válida: prueba con otra más larga o menos típica.';
     if (/row-level security/i.test(m)) return 'No puedes hacer eso ahora mismo.';
     if (/rate limit|too many/i.test(m)) return 'Demasiados intentos. Espera un minuto.';
     return m || 'Algo ha fallado.';
@@ -582,7 +582,7 @@
     } else if (tipo === 'clave') {
       var a = String(d.get('a')), b = String(d.get('b'));
       if (a !== b) { L.error = 'Las contraseñas no coinciden.'; render(); return; }
-      if (a.length < 8) { L.error = 'Mínimo 8 caracteres.'; render(); return; }
+      if (a.length < 4) { L.error = 'Mínimo 4 caracteres.'; render(); return; }
       L.ocupado = true; L.error = ''; render();
       API.cambiarPass(a).then(function () { return API.rpc('pass_cambiada'); })
         .then(function () { return cargarTodo(); })
