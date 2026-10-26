@@ -131,10 +131,9 @@
     try { var s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); } catch (e) { /* da igual */ }
     cargarSonidos();
   }
-  // Sonidos reales en sonidos/*.mp3 (el eructo es de BigSoundBank, CC0). Se descargan y decodifican tras el primer toque;
+  // Sonidos reales en sonidos/*.mp3 (el eructo es de BigSoundBank, CC0; el gemido, de Pixabay/freesound_community). Se descargan y decodifican tras el primer toque;
   // si falta un archivo, ese sonido simplemente no suena.
-  // Para activar el gemido de Mamá Noel: añadir sonidos/gemido.mp3 y la entrada  gemido: { buf: null, cargando: false, vol: .8 }  aquí.
-  var SONIDOS = { eructo: { buf: null, cargando: false, vol: .8 } };
+  var SONIDOS = { eructo: { buf: null, cargando: false, vol: .8 }, gemido: { buf: null, cargando: false, vol: .8 } };
   var ultimoEructo = 0;
   function cargarSonidos() {
     var c = ac;
