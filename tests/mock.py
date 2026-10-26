@@ -30,6 +30,7 @@ class Mock:
     def __init__(self):
         self.users = {}; self.tokens = {}; self.jug = {}; self.enl = {}
         self.cartones = {}; self.jurado = []; self.fotos = []; self.reac = []; self.gan = {'linea':[],'bingo':[]}; self.cantos = []; self.votos = []
+        self.premios = [{'tipo':'linea','puesto':1,'premio':None},{'tipo':'linea','puesto':2,'premio':None},{'tipo':'linea','puesto':3,'premio':None},{'tipo':'bingo','puesto':1,'premio':None}]
         self.cupo = {'linea':3,'bingo':1}
         self.storage = {}; self.ajustes = {'pass_defecto': DEFAULT_PASS}; self.log = []
         self.add('adrianmg231189@gmail.com','Adrián',True,'AdminPass-12345')
@@ -100,7 +101,7 @@ class Mock:
               'fotos': [f for f in self.fotos if self.visible_foto(f,uid)],
               'reacciones': self.reac,
               'ganadores': [{'canto_id':g['canto'],'tipo':t,'puesto':i+1,'jugador_id':g['jug']} for t in ('linea','bingo') for i,g in enumerate(self.gan[t])],
-              'premios': [{'tipo':t,'cupo':c,'premio':None} for t,c in self.cupo.items()],
+              'premios': self.premios,
               'cantos': [k for k in self.cantos if k['jugador_id']==uid or k['estado']=='ok' or self.jury(uid)],
               'votos': self.votos if self.jury(uid) else [],
               'enlaces': [{'jugador_id':k,'token':v} for k,v in self.enl.items()] if self.admin(uid) else [],
@@ -161,6 +162,11 @@ class Mock:
             assert not d or time.time()>=time.mktime(time.strptime(d[:19],'%Y-%m-%dT%H:%M:%S')),'Todavía no se puede valorar (desde '+d+')'
             f['estado']='ok' if a['p_ok'] else 'ko'; f['valorada_por']=uid
             return 204,None
+        if n=='definir_premio':
+            assert self.admin(uid),'Solo el admin'
+            x=[p for p in self.premios if p['tipo']==a['p_tipo'] and p['puesto']==a['p_puesto']]
+            assert x,'Ese premio no existe'
+            x[0]['premio']=(a['p_premio'] or '').strip() or None; return 204,None
         if n=='cantar':
             t=a['p_tipo']; filas,bingo=self.filas_ok(uid)
             assert self.cartones.get(uid),'Todavía no tienes cartón'

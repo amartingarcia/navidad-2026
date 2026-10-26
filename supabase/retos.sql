@@ -1,4 +1,4 @@
--- NPGingo · challenge pool (ids 1-30). Run in the Supabase SQL Editor AFTER schema.sql and BEFORE dealing the cards.
+-- NPGingo · challenge pool (ids 1-31). Run in the Supabase SQL Editor AFTER schema.sql and BEFORE dealing the cards.
 -- Idempotent: re-running updates the texts of existing ids. Edit or delete lines freely before running.
 -- `desde` (valuation time) is null = no waiting; the "pibón" is only ruled on from 27 Dec 12:00.
 -- `hasta` (deadline): every challenge closes at 08:00 on 27 Dec; the Jäger one earlier, at 18:00 on 26 Dec.
@@ -8,12 +8,12 @@ insert into public.retos (id, icono, titulo, franja, tipo, fijo, pista, desde, h
  ('1','🥃','2 chupitos de Jäger antes de las 18:00','Día','individual',false,'Foto con los 2 chupitos y la hora visible en el móvil.',null,timestamptz '2026-12-26 18:00:00+01'),
  ('2','🪂','Manteo a Maritsu','19:00 · Cá Maritsu','grupal',true,'Foto o vídeo corto del manteo. Vale una sola para todo el grupo.',null,timestamptz '2026-12-27 08:00:00+01'),
  ('3','😁','Foto con Jose, de Bar La Plaza, sonriendo','Ruta','individual',false,'Selfie con Jose. Los dos sonriendo, que se vean los dientes.',null,timestamptz '2026-12-27 08:00:00+01'),
- ('4','💋','Pico a un chico (que no sea tu pareja)','Cualquiera','individual',false,'Foto del pico. Solo vale si el otro quiere salir en la foto.',null,timestamptz '2026-12-27 08:00:00+01'),
- ('5','💋','Pico a una chica (que no sea tu pareja)','Cualquiera','individual',false,'Foto del pico. Solo vale si ella quiere salir en la foto.',null,timestamptz '2026-12-27 08:00:00+01'),
- ('6','🔥','Foto al pibón de la noche','Noche','jurado',false,'Que sepa que sale en la foto y se lo tome con humor. Decide el jurado.', timestamptz '2026-12-27 12:00:00+01',timestamptz '2026-12-27 08:00:00+01'),
+ ('4','💋','Pico a un chico','Cualquiera','individual',false,'Foto del pico. Solo vale si el otro quiere salir en la foto.',null,timestamptz '2026-12-27 08:00:00+01'),
+ ('5','💋','Pico a una chica','Cualquiera','individual',false,'Foto del pico. Solo vale si ella quiere salir en la foto.',null,timestamptz '2026-12-27 08:00:00+01'),
+ ('6','🔥','Pibón de la jornada','Noche','jurado',false,'Que sepa que sale en la foto y se lo tome con humor. Se someterá a votación.', timestamptz '2026-12-27 12:00:00+01',timestamptz '2026-12-27 08:00:00+01'),
  ('7','🐴','Montar a borriquito a Angelines','Nuevo Café','individual',false,'Foto montando a Angelines. Solo si Angelines se apunta.',null,timestamptz '2026-12-27 08:00:00+01'),
- ('8','🏆','Mejor atuendo del día','Cena','jurado',false,'Foto del atuendo completo. Vota el jurado en la cena.',null,timestamptz '2026-12-27 08:00:00+01'),
- ('9','💩','Peor atuendo del día','Cena','jurado',false,'Foto del atuendo completo. Vota el jurado en la cena.',null,timestamptz '2026-12-27 08:00:00+01'),
+ ('8','🏆','Mejor outfit del día','Cena','jurado',false,'Foto del outfit completo, de cuerpo entero.',null,timestamptz '2026-12-27 08:00:00+01'),
+ ('9','💩','Peor outfit del día','Cena','jurado',false,'Foto del outfit completo, de cuerpo entero.',null,timestamptz '2026-12-27 08:00:00+01'),
  ('10','📝','Teléfono en una servilleta a una chica','Noche','individual',false,'Foto de la servilleta entregada, o que otra persona te haga la foto mientras la entregas.',null,timestamptz '2026-12-27 08:00:00+01'),
  ('11','🎤','Cantar «Mané Mané»','Nuevo Café','grupal',false,'Foto o vídeo corto del grupo cantando. Vale una sola para todos.',null,timestamptz '2026-12-27 08:00:00+01'),
  ('12','💡','Encender las luces de la discoteca al cerrar','Cierre','individual',false,'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.',null,timestamptz '2026-12-27 08:00:00+01'),
@@ -35,7 +35,8 @@ insert into public.retos (id, icono, titulo, franja, tipo, fijo, pista, desde, h
  ('27','🕺','Peor baile del día','Noche','jurado',false,'Foto o vídeo corto del baile. Decide el jurado.',null,timestamptz '2026-12-27 08:00:00+01'),
  ('28','🧦','Algo navideño que lleves puesto, a la vista','Cualquiera','individual',false,'Calcetines, gorro, jersey feo o lo que lleves. Foto enseñándolo con orgullo.',null,timestamptz '2026-12-27 08:00:00+01'),
  ('29','🎁','Regalo exprés a alguien del grupo','Ruta','individual',false,'Invita a una tapa o a un chupito a alguien del grupo. Foto del momento de dárselo.',null,timestamptz '2026-12-27 08:00:00+01'),
- ('30','🌙','Foto de los últimos en pie','Cierre','grupal',false,'Mínimo 5 personas del grupo, de madrugada y sin una sola cara seria. Vale una sola para todos.',null,timestamptz '2026-12-27 08:00:00+01')
+ ('30','🌙','Foto de los últimos en pie','Cierre','grupal',false,'Mínimo 5 personas del grupo, de madrugada y sin una sola cara seria. Vale una sola para todos.',null,timestamptz '2026-12-27 08:00:00+01'),
+ ('31','💸','Bizum de Goria de 500 €','Cualquiera','individual',false,'Captura de pantalla del Bizum de 500 € recibido de Goria.',null,timestamptz '2026-12-27 08:00:00+01')
 on conflict (id) do update set
   icono = excluded.icono, titulo = excluded.titulo, franja = excluded.franja, tipo = excluded.tipo,
   fijo = excluded.fijo, pista = excluded.pista, desde = excluded.desde, hasta = excluded.hasta;

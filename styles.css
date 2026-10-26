@@ -222,3 +222,14 @@ button, a { touch-action: manipulation; }
 .aviso div + div { margin-top: 6px; }
 .celda.cerrada { opacity: .55; filter: grayscale(1); }
 .celda.cerrada .sello { background: var(--tinta); }
+
+.podio { background: #1c3556; border-left: 4px solid var(--oro); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+.podio h3 { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--oro); margin: 0 0 6px; }
+.podio ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.podio li { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 8px; font-size: 14px; }
+.podio .med { font-size: 22px; text-align: center; }
+.podio .pr b { display: block; }
+.podio .pr small { color: #b9c7da; }
+.podio .quien { font-weight: 700; color: #b9c7da; }
+.podio li.gana .quien { color: var(--oro); }
+.fila-premio { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; margin-bottom: 10px; }

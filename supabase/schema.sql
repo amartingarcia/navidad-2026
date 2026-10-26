@@ -22,6 +22,10 @@ begin
   if to_regclass('public.retos') is not null then
     delete from public.retos where id in ('linea','bingo');
   end if;
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'premios' and column_name = 'cupo') then
+    drop table public.premios;                                 -- v2 shape (tipo, cupo): now one row per prize
+  end if;
 end $$;
 drop function if exists public.puede_cantar(text, int);
 
@@ -105,13 +109,16 @@ create table if not exists public.reacciones (
   primary key (foto_id, jugador_id, emoji)
 );
 
--- Prizes in play: 3 lines and 1 bingo. `premio` null = still to be decided.
+-- Prizes in play, one row per podium place: 1st/2nd/3rd line and the bingo. `premio` null = still to be decided.
+-- The number of rows of each type is the number of prizes available (the admin edits the text with definir_premio).
 create table if not exists public.premios (
-  tipo   text primary key check (tipo in ('linea','bingo')),
-  cupo   smallint not null check (cupo > 0),
-  premio text
+  tipo   text not null check (tipo in ('linea','bingo')),
+  puesto smallint not null check (puesto > 0),
+  premio text,
+  primary key (tipo, puesto)
 );
-insert into public.premios (tipo, cupo) values ('linea', 3), ('bingo', 1) on conflict (tipo) do nothing;
+insert into public.premios (tipo, puesto) values ('linea', 1), ('linea', 2), ('linea', 3), ('bingo', 1)
+  on conflict (tipo, puesto) do nothing;
 
 -- A "canto" = a player shouting línea/bingo. No photo: the jury checks the player's validated photos
 -- (3 of the row for a línea, all 9 for a bingo) and needs 2 approvals to accept it.
@@ -232,7 +239,7 @@ begin
   if p_tipo not in ('linea','bingo') then raise exception 'Tipo no válido'; end if;
   select celdas into c from cartones where jugador_id = auth.uid();
   if c is null then raise exception 'Todavía no tienes cartón'; end if;
-  select pr.cupo into v_cupo from premios pr where pr.tipo = p_tipo;
+  select count(*) into v_cupo from premios pr where pr.tipo = p_tipo;
   if (select count(*) from ganadores g where g.tipo = p_tipo) >= v_cupo then
     raise exception 'Ya se han llevado todos los premios de este tipo';
   end if;
@@ -281,7 +288,7 @@ begin
   select count(*) into v_elegibles from jurado j where j.jugador_id <> k.jugador_id;
 
   if v_si >= 2 then
-    select pr.cupo into v_cupo from premios pr where pr.tipo = k.tipo;
+    select count(*) into v_cupo from premios pr where pr.tipo = k.tipo;
     select count(*) into v_ocupados from ganadores g where g.tipo = k.tipo;
     if v_ocupados < v_cupo then
       insert into ganadores (canto_id, tipo, puesto, jugador_id) values (k.id, k.tipo, v_ocupados + 1, k.jugador_id);
@@ -302,6 +309,15 @@ begin
 end $$;
 
 -- ───────────────────────── Admin RPCs ─────────────────────────
+
+-- Set the text of a prize (p_tipo 'linea'|'bingo', p_puesto 1..n). Empty text = still to be decided.
+create or replace function public.definir_premio(p_tipo text, p_puesto int, p_premio text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not es_admin() then raise exception 'Solo el admin'; end if;
+  update premios set premio = nullif(btrim(p_premio), '') where tipo = p_tipo and puesto = p_puesto;
+  if not found then raise exception 'Ese premio no existe'; end if;
+end $$;
 
 -- Reset a player's password to the default one and force a new change (forgotten password).
 create or replace function public.resetear_pass(p_jugador uuid) returns void
@@ -392,10 +408,10 @@ revoke all on function public.nombre_por_token(text) from public;
 grant execute on function public.nombre_por_token(text) to anon, authenticated;
 revoke all on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
                        public.repartir_cartones(boolean), public.cantar(text), public.votar_canto(uuid, boolean),
-                       public.es_admin(), public.es_jurado(), public.resetear_pass(uuid) from public;
+                       public.es_admin(), public.es_jurado(), public.resetear_pass(uuid), public.definir_premio(text, int, text) from public;
 grant execute on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
                           public.repartir_cartones(boolean), public.cantar(text), public.votar_canto(uuid, boolean),
-                          public.es_admin(), public.es_jurado(), public.resetear_pass(uuid) to authenticated;
+                          public.es_admin(), public.es_jurado(), public.resetear_pass(uuid), public.definir_premio(text, int, text) to authenticated;
 grant execute on all functions in schema public to service_role;
 
 drop policy if exists jugadores_leer on public.jugadores;

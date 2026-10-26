@@ -61,7 +61,7 @@ with sync_playwright() as p:
 
     A.goto(BASE+'#/carton'); A.wait_for_timeout(600)
     check('boton cantar linea', 'Cantar línea' in A.inner_text('#app') and 'Cantar bingo' not in A.inner_text('#app'))
-    check('banner premios por determinar', '3' in A.inner_text('.aviso') and 'por determinar' in A.inner_text('.aviso'))
+    check('podio: 3 lineas + bingo, premios por determinar', A.locator('.podio li').count()==4 and 'Premio por determinar' in A.inner_text('.podio') and 'Libre' in A.inner_text('.podio'))
     A.click('button:has-text("Cantar línea")'); A.wait_for_timeout(900)
     check('canto sin foto', len(m.cantos)==1 and m.cantos[0]['tipo']=='linea' and m.cantos[0]['fila']==0 and not any(f['reto'] in ('linea','bingo') for f in m.fotos))
     check('canto pendiente deshabilitado', A.locator('button:disabled:has-text("Línea cantada")').count()==1)
@@ -76,7 +76,10 @@ with sync_playwright() as p:
     S2.click('button:has-text("Es válido")'); S2.wait_for_timeout(900)
     check('2 de 3 => linea concedida', m.cantos[0]['estado']=='ok' and len(m.gan['linea'])==1)
     A.reload(); A.wait_for_timeout(900)
-    check('banner ganador de la linea', 'Amós' in A.inner_text('.aviso') and 'quedan 2' in A.inner_text('.aviso') and 'Cantar línea' not in A.inner_text('#app'))
+    check('podio con el nombre del ganador en 1ª linea', A.locator('.podio li.gana').count()==1 and 'Amós' in A.inner_text('.podio li.gana') and '1ª línea' in A.inner_text('.podio li.gana') and 'Cantar línea' not in A.inner_text('#app'))
+    m.rpc('definir_premio',{'p_tipo':'linea','p_puesto':1,'p_premio':'Un jamón'},adm)
+    A.reload(); A.wait_for_timeout(900)
+    check('premio definido visible en el podio', 'Un jamón' in A.inner_text('.podio'))
     # reto con hora minima: pendiente para el jurado y bloqueado
     A.goto(BASE+'#/carton'); A.wait_for_timeout(300); subir(A,'6')
     check('pibon queda en revision', 'En revisión' in A.inner_text('button[data-id="6"]'))

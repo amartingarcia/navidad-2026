@@ -17,7 +17,7 @@
   var S = vacio();
   function vacio() {
     return { cargado: false, me: null, players: [], retos: {}, cartones: {}, jurado: [], photos: [], reacciones: {}, cantos: [], votos: [],
-      premios: { linea: { cupo: 3, premio: null }, bingo: { cupo: 1, premio: null } }, ganadores: { linea: [], bingo: [] }, enlaces: {}, firma: '' };
+      premios: { linea: [], bingo: [] }, ganadores: { linea: [], bingo: [] }, enlaces: {}, firma: '' };
   }
 
   /* ---------- utilidades ---------- */
@@ -53,7 +53,7 @@
       API.get('reacciones', 'select=foto_id,jugador_id,emoji'),
       API.get('ganadores', 'select=canto_id,tipo,puesto,jugador_id&order=puesto.asc'),
       API.get('enlaces', 'select=jugador_id,token'),
-      API.get('premios', 'select=tipo,cupo,premio'),
+      API.get('premios', 'select=tipo,puesto,premio&order=puesto.asc'),
       API.get('cantos', 'select=id,jugador_id,tipo,fila,estado,creada&order=creada.asc'),
       API.get('votos', 'select=canto_id,jurado_id,ok')
     ]).then(function (r) {
@@ -66,10 +66,10 @@
           me: { id: yoFila.id, name: yoFila.nombre, admin: yoFila.es_admin, cambio: yoFila.cambio_pass },
           players: jugadores.map(function (j) { return { id: j.id, name: j.nombre, admin: j.es_admin, cambio: j.cambio_pass }; }),
           retos: {}, cartones: {}, jurado: r[3].map(function (x) { return x.jugador_id; }), photos: [], reacciones: {},
-          cantos: r[9], votos: r[10], premios: { linea: { cupo: 3, premio: null }, bingo: { cupo: 1, premio: null } },
+          cantos: r[9], votos: r[10], premios: { linea: [], bingo: [] },
           ganadores: { linea: [], bingo: [] }, enlaces: {}
         };
-        r[8].forEach(function (x) { nuevo.premios[x.tipo] = { cupo: x.cupo, premio: x.premio }; });
+        r[8].forEach(function (x) { nuevo.premios[x.tipo].push({ puesto: x.puesto, premio: x.premio }); });
         r[1].forEach(function (x) { nuevo.retos[x.id] = x; });
         r[2].forEach(function (x) { nuevo.cartones[x.jugador_id] = x.celdas; });
         var nombre = {};
@@ -99,7 +99,7 @@
     return S.retos[String(id)] || { id: String(id), icono: '❔', titulo: 'Reto', franja: '', tipo: 'individual', pista: '' };
   }
   var NOMBRE_CANTO = { linea: 'Línea', bingo: 'Bingo' };
-  function quedan(tipo) { return S.premios[tipo].cupo - S.ganadores[tipo].length; }
+  function quedan(tipo) { return S.premios[tipo].length - S.ganadores[tipo].length; }
   function yaGane(tipo, pid) { return S.ganadores[tipo].some(function (g) { return g.playerId === pid; }); }
   function cantosDe(pid, tipo) { return S.cantos.filter(function (k) { return k.jugador_id === pid && k.tipo === tipo; }); }
   function cantoPend(pid, tipo) { return cantosDe(pid, tipo).filter(function (k) { return k.estado === 'pend'; })[0] || null; }
@@ -251,16 +251,22 @@
   function vCargando() { return entrada('<section class="panel"><p>Cargando…</p></section>'); }
 
   /* ----- juego ----- */
-  function banner() {
-    function bloque(tipo, titulo) {
-      var g = S.ganadores[tipo], q = quedan(tipo), pr = S.premios[tipo].premio;
-      var t = '<strong>' + titulo + '</strong> · ' + (q > 0 ? (q === 1 ? 'queda 1' : 'quedan ' + q) + ' de ' + S.premios[tipo].cupo : 'todos repartidos') +
-        ' · ' + (pr ? esc(pr) : 'premio por determinar');
-      if (g.length) t += '<br>' + g.map(function (x) { return x.puesto + 'º ' + esc(jugador(x.playerId).name) + ' 🏆'; }).join(' · ');
-      return '<div>' + t + '</div>';
-    }
-    return '<div class="aviso">' + bloque('linea', 'Líneas') + bloque('bingo', 'Bingo') + '</div>';
+  // Podio: una fila por premio (1ª, 2ª y 3ª línea, bingo) con el ganador cuando ya lo hay.
+  var MEDALLA = { linea: ['🥇', '🥈', '🥉'], bingo: ['🏆'] };
+  function podio() {
+    var filas = [];
+    ['linea', 'bingo'].forEach(function (tipo) {
+      S.premios[tipo].forEach(function (pr) {
+        var g = S.ganadores[tipo].filter(function (x) { return x.puesto === pr.puesto; })[0];
+        var nombre = tipo === 'bingo' ? 'Bingo' : pr.puesto + 'ª línea';
+        filas.push('<li class="' + (g ? 'gana' : '') + '"><span class="med" aria-hidden="true">' + (MEDALLA[tipo][pr.puesto - 1] || '🎖️') + '</span>' +
+          '<span class="pr"><b>' + nombre + '</b><small>' + (pr.premio ? esc(pr.premio) : 'Premio por determinar') + '</small></span>' +
+          '<span class="quien">' + (g ? esc(jugador(g.playerId).name) : 'Libre') + '</span></li>');
+      });
+    });
+    return '<section class="podio" aria-label="Premios"><h3>Premios</h3><ul>' + filas.join('') + '</ul></section>';
   }
+  function banner() { return podio(); }
 
   function vCarton() {
     var p = yo(), c = carton(p.id), n = sellos(p.id), lineas = lineasCompletas(p.id);
@@ -337,7 +343,7 @@
   }
 
   function vAdmin() {
-    var tabs = [['sorteo', 'Jurado y cartones'], ['enlaces', 'Enlaces']];
+    var tabs = [['sorteo', 'Jurado y cartones'], ['premios', 'Premios'], ['enlaces', 'Enlaces']];
     var h = '<div class="segmento" role="group" aria-label="Secciones del admin">' + tabs.map(function (t) {
       return '<button data-acc="tab" data-tab="' + t[0] + '" aria-pressed="' + (adminTab === t[0]) + '">' + t[1] + '</button>';
     }).join('') + '</div>';
@@ -357,6 +363,19 @@
         (repartidos
           ? '<button class="btn fantasma ancho" style="margin-top:12px" data-acc="rehacer">Rehacer cartones (borra el progreso)</button>'
           : '<button class="btn oro ancho" style="margin-top:12px" data-acc="repartir">Repartir cartones</button>') + '</section>';
+    }
+
+    if (adminTab === 'premios') {
+      h += '<section class="panel"><h3>Premios</h3><p>Escribe qué se lleva cada puesto. Déjalo vacío si aún no está decidido.</p>' +
+        ['linea', 'bingo'].map(function (tipo) {
+          return S.premios[tipo].map(function (pr) {
+            var nombre = tipo === 'bingo' ? 'Bingo' : pr.puesto + 'ª línea';
+            return '<form class="fila-premio" data-form="premio" data-tipo="' + tipo + '" data-puesto="' + pr.puesto + '">' +
+              '<label class="campo"><span>' + (MEDALLA[tipo][pr.puesto - 1] || '🎖️') + ' ' + nombre + '</span>' +
+              '<input name="p" type="text" maxlength="80" autocomplete="off" value="' + esc(pr.premio || '') + '" placeholder="Por determinar"></label>' +
+              '<button class="btn mini" type="submit">Guardar</button></form>';
+          }).join('');
+        }).join('') + '</section>';
     }
 
     if (adminTab === 'enlaces') {
@@ -629,6 +648,10 @@
         L.error = err.status === 400 ? (tipo === 'login' ? 'Contraseña incorrecta.' : 'Email o contraseña incorrectos.') : traducir(err);
         render();
       });
+    } else if (tipo === 'premio') {
+      API.rpc('definir_premio', { p_tipo: f.dataset.tipo, p_puesto: Number(f.dataset.puesto), p_premio: String(d.get('p')) })
+        .then(function () { return recargar('Premio guardado.'); })
+        .catch(function (err) { toast(traducir(err)); });
     } else if (tipo === 'clave') {
       var a = String(d.get('a')), b = String(d.get('b'));
       if (a !== b) { L.error = 'Las contraseñas no coinciden.'; render(); return; }
