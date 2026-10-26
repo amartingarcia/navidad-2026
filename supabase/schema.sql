@@ -140,25 +140,7 @@ create table if not exists public.ganadores (
   unique (tipo, puesto)
 );
 
--- ───────────────────────── Challenge pool (first iteration) ─────────────────────────
-
-insert into public.retos (id, icono, titulo, franja, tipo, fijo, pista, desde) values
- ('1','🥃','2 chupitos de Jäger antes de las 18:00','Día','individual',false,'Foto con los 2 chupitos y la hora visible en el móvil.',null),
- ('2','🪂','Manteo a Maritsu','19:00 · Cá Maritsu','grupal',true,'Foto o vídeo corto del manteo. Vale una sola para todo el grupo.',null),
- ('3','😁','Foto con Jose, de Bar La Plaza, sonriendo','Ruta','individual',false,'Selfie con Jose. Los dos sonriendo, que se vean los dientes.',null),
- ('4','💋','Pico a un chico (que no sea tu pareja)','Cualquiera','individual',false,'Foto del pico. Solo vale si el otro quiere salir en la foto.',null),
- ('5','💋','Pico a una chica (que no sea tu pareja)','Cualquiera','individual',false,'Foto del pico. Solo vale si ella quiere salir en la foto.',null),
- ('6','🔥','Foto al pibón de la noche','Noche','jurado',false,'Que sepa que sale en la foto y se lo tome con humor. Decide el jurado.', timestamptz '2026-12-27 12:00:00+01'),
- ('7','🐴','Montar a borriquito a Angelines','Nuevo Café','individual',false,'Foto montando a Angelines. Solo si Angelines se apunta.',null),
- ('8','🏆','Mejor atuendo del día','Cena','jurado',false,'Foto del atuendo completo. Vota el jurado en la cena.',null),
- ('9','💩','Peor atuendo del día','Cena','jurado',false,'Foto del atuendo completo. Vota el jurado en la cena.',null),
- ('10','📝','Teléfono en una servilleta a una chica','Noche','individual',false,'Foto de la servilleta entregada, o que otra persona te haga la foto mientras la entregas.',null),
- ('11','🎤','Cantar «Mané Mané»','Nuevo Café','grupal',false,'Foto o vídeo corto del grupo cantando. Vale una sola para todos.',null),
- ('12','💡','Encender las luces de la discoteca al cerrar','Cierre','individual',false,'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.',null)
-on conflict (id) do update set
-  icono = excluded.icono, titulo = excluded.titulo, franja = excluded.franja, tipo = excluded.tipo,
-  fijo = excluded.fijo, pista = excluded.pista, desde = excluded.desde;
-
+-- Challenges live in supabase/retos.sql (run it after this file, before dealing the cards).
 -- ───────────────────────── Helpers ─────────────────────────
 
 create or replace function public.es_admin() returns boolean

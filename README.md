@@ -14,7 +14,7 @@ Frontend estático (HTML, CSS y JS sin build) sobre Supabase (Auth, Postgres con
 
 ## Reglas del juego
 
-- Cartón 3x3 fijo por jugador: casilla central «Manteo a Maritsu» y 8 retos al azar del pool (`supabase/schema.sql`, tabla `retos`).
+- Cartón 3x3 fijo por jugador: casilla central «Manteo a Maritsu» y 8 retos al azar del pool (`supabase/retos.sql`, tabla `retos`).
 - Solo cuentan las **filas horizontales**. Las fotos se aceptan al subirlas y se pueden repetir (la nueva sustituye a la anterior).
 - **Cantos:** «¡Cantar línea!» y «¡Cantar bingo!» no llevan foto. El jurado (2 jugadores al azar + el admin) revisa las fotos del jugador y vota; se necesitan **2 de 3** a favor. Nadie vota su propio canto. Hay **3 premios de línea y 1 de bingo** (premios por determinar, columna `premios.premio`). Solo el jurado valora la foto del pibón de la noche.
 - Cada reto puede tener una hora mínima de valoración (`retos.desde`; el pibón de la noche, el 27 dic 12:00). La comprueba el servidor.
@@ -53,4 +53,3 @@ El simulador reproduce las reglas de RLS y las funciones del esquema; no sustitu
 
 ## Pendiente
 
-- Completar el pool hasta ~30 retos y confirmar la hora mínima del pibón.

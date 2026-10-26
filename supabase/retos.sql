@@ -1,8 +1,22 @@
--- NPGingo · retos 13-30 (tanda 2). Run once in the Supabase SQL Editor, BEFORE dealing the cards.
--- Delete the lines you do not like before running. Safe to re-run (existing ids are left untouched).
--- `desde` (valuation time) is null = the jury can rule on the spot.
+-- NPGingo · challenge pool (ids 1-30). Run in the Supabase SQL Editor AFTER schema.sql and BEFORE dealing the cards.
+-- Idempotent: re-running updates the texts of existing ids. Edit or delete lines freely before running.
+-- `desde` (valuation time) is null = no waiting; the "pibón" is only ruled on from 27 Dec 12:00.
+-- If cards are already dealt, use "Rehacer cartones" in the admin panel after changing the pool.
 
 insert into public.retos (id, icono, titulo, franja, tipo, fijo, pista, desde) values
+ ('1','🥃','2 chupitos de Jäger antes de las 18:00','Día','individual',false,'Foto con los 2 chupitos y la hora visible en el móvil.',null),
+ ('2','🪂','Manteo a Maritsu','19:00 · Cá Maritsu','grupal',true,'Foto o vídeo corto del manteo. Vale una sola para todo el grupo.',null),
+ ('3','😁','Foto con Jose, de Bar La Plaza, sonriendo','Ruta','individual',false,'Selfie con Jose. Los dos sonriendo, que se vean los dientes.',null),
+ ('4','💋','Pico a un chico (que no sea tu pareja)','Cualquiera','individual',false,'Foto del pico. Solo vale si el otro quiere salir en la foto.',null),
+ ('5','💋','Pico a una chica (que no sea tu pareja)','Cualquiera','individual',false,'Foto del pico. Solo vale si ella quiere salir en la foto.',null),
+ ('6','🔥','Foto al pibón de la noche','Noche','jurado',false,'Que sepa que sale en la foto y se lo tome con humor. Decide el jurado.', timestamptz '2026-12-27 12:00:00+01'),
+ ('7','🐴','Montar a borriquito a Angelines','Nuevo Café','individual',false,'Foto montando a Angelines. Solo si Angelines se apunta.',null),
+ ('8','🏆','Mejor atuendo del día','Cena','jurado',false,'Foto del atuendo completo. Vota el jurado en la cena.',null),
+ ('9','💩','Peor atuendo del día','Cena','jurado',false,'Foto del atuendo completo. Vota el jurado en la cena.',null),
+ ('10','📝','Teléfono en una servilleta a una chica','Noche','individual',false,'Foto de la servilleta entregada, o que otra persona te haga la foto mientras la entregas.',null),
+ ('11','🎤','Cantar «Mané Mané»','Nuevo Café','grupal',false,'Foto o vídeo corto del grupo cantando. Vale una sola para todos.',null),
+ ('12','💡','Encender las luces de la discoteca al cerrar','Cierre','individual',false,'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.',null),
+
  ('13','🍻','Brindar con un camarero o camarera','Ruta','individual',false,'Selfie brindando con quien te ha puesto la caña. Que se vea la sonrisa de los dos.',null),
  ('14','🎅','Selfie con un desconocido con gorro de Papá Noel','Cualquiera','individual',false,'Selfie con alguien que no sea del grupo y lleve gorro navideño. Solo si quiere salir.',null),
  ('15','🎄','Un adorno navideño del bar puesto en la cabeza','Ruta','individual',false,'Foto con un adorno del local en la cabeza. Si el dueño te lo deja, mejor.',null),
@@ -21,4 +35,6 @@ insert into public.retos (id, icono, titulo, franja, tipo, fijo, pista, desde) v
  ('28','🧦','Algo navideño que lleves puesto, a la vista','Cualquiera','individual',false,'Calcetines, gorro, jersey feo o lo que lleves. Foto enseñándolo con orgullo.',null),
  ('29','🎁','Regalo exprés a alguien del grupo','Ruta','individual',false,'Invita a una tapa o a un chupito a alguien del grupo. Foto del momento de dárselo.',null),
  ('30','🌙','Foto de los últimos en pie','Cierre','grupal',false,'Mínimo 5 personas del grupo, de madrugada y sin una sola cara seria. Vale una sola para todos.',null)
-on conflict (id) do nothing;
+on conflict (id) do update set
+  icono = excluded.icono, titulo = excluded.titulo, franja = excluded.franja, tipo = excluded.tipo,
+  fijo = excluded.fijo, pista = excluded.pista, desde = excluded.desde;
