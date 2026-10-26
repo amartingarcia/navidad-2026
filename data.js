@@ -30,6 +30,15 @@ window.NPG = {
       pista: 'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.' }
   ],
 
+  // Cantos: no están en el cartón. Se desbloquean al completar una línea o los 9 sellos
+  // y funcionan igual que cualquier reto: foto + validación del jurado.
+  CANTOS: {
+    linea: { id: 'linea', icono: '🎯', titulo: '¡Línea!', franja: 'Al completarla', tipo: 'canto',
+      pista: 'Foto tuya con el cartón abierto en el móvil y la línea completa a la vista. El jurado comprueba las fotos de esa línea.' },
+    bingo: { id: 'bingo', icono: '🏁', titulo: '¡Bingo!', franja: 'Al completarlo', tipo: 'canto',
+      pista: 'Foto tuya con el cartón abierto en el móvil y los 9 sellos a la vista. El jurado comprueba las 9 fotos.' }
+  },
+
   // Los 22 jugadores incluyen al admin: tiene cartón como el resto, más funciones especiales.
   ADMIN: 'Adri',
   JUGADORES: ['Dani', 'Marcos', 'Raúl', 'Javi', 'Nacho', 'Pablo', 'Sergio', 'Álvaro', 'Iván', 'Rubén', 'Fer',

@@ -12,7 +12,6 @@
   var $toast = document.getElementById('toast');
   var state;
   var adminTab = 'sorteo';
-  var juradoTab = 'fotos';
   var imgPendiente = null;
 
   /* ---------- utilidades ---------- */
@@ -36,7 +35,8 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function reto(id) { return RETOS.filter(function (r) { return r.id === id; })[0]; }
+  function reto(id) { return N.CANTOS[id] || RETOS.filter(function (r) { return r.id === id; })[0]; }
+  function idReto(v) { return N.CANTOS[v] ? v : Number(v); }
   function hora(ts) { return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); }
   function toast(msg) {
     $toast.textContent = msg;
@@ -66,7 +66,7 @@
         user: n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       };
     });
-    var s = { session: null, players: jugadores, photos: [], claims: [], ganadores: { linea: null, bingo: null }, jurado: sortear(jugadores) };
+    var s = { session: null, players: jugadores, photos: [], ganadores: { linea: null, bingo: null }, jurado: sortear(jugadores) };
     var colores = ['#1E6B4A', '#D4283C', '#18304F', '#8a5a00', '#5b2a86'];
     function foto(pid, rid, estado, min) {
       s.photos.push({ id: pid + '-' + rid + '-' + min, playerId: pid, retoId: rid, status: estado,
@@ -148,27 +148,18 @@
     var pend = pendientes(excluirPid);
     if (!pend.length) return '<div class="vacio">No hay fotos por validar. Descansa un rato.</div>';
     return '<div class="muro">' + pend.map(function (f) {
-      var r = reto(f.retoId);
+      var r = reto(f.retoId), pid = f.playerId, mini = '';
+      if (r.tipo === 'canto') {
+        mini = '<div class="miniaturas">' + carton(pid).map(function (rid) {
+          var g = estadoReto(pid, rid);
+          return g ? '<img src="' + g.img + '" alt="' + esc(reto(rid).titulo) + '">' : '';
+        }).join('') + '</div>';
+      }
       return '<figure class="foto-card"><img src="' + f.img + '" alt="' + esc(r.titulo) + '">' +
-        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small></figcaption>' +
+        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small>' + mini + '</figcaption>' +
         '<div class="acc"><button class="btn mini" data-acc="aprobar" data-id="' + esc(f.id) + '">Validar</button>' +
         '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div></figure>';
     }).join('') + '</div>';
-  }
-  function cantosPendientes(excluirPid) {
-    return state.claims.filter(function (c) { return c.estado === 'pend' && c.playerId !== excluirPid; });
-  }
-  function listaCantos(excluirPid) {
-    var cs = state.claims.filter(function (c) { return c.playerId !== excluirPid; }).sort(function (a, b) { return b.ts - a.ts; });
-    if (!cs.length) return '<div class="vacio">Nadie ha cantado todavía.</div>';
-    return cs.map(function (c) {
-      var p = jugador(c.playerId), pid = p.id;
-      var mini = carton(pid).map(function (rid) { var f = estadoReto(pid, rid); return f ? '<img src="' + f.img + '" alt="' + esc(reto(rid).titulo) + '">' : ''; }).join('');
-      return '<section class="panel"><h3>' + (c.tipo === 'bingo' ? 'Bingo' : 'Línea') + ' de ' + esc(p.name) + ' <span class="etq ' + c.estado + '">' +
-        { pend: 'Por revisar', ok: 'Válido', ko: 'Anulado' }[c.estado] + '</span></h3><p>Cantado a las ' + hora(c.ts) + (c.por ? ' · Resuelto por ' + esc(c.por) : '') + '</p><div class="miniaturas">' + mini + '</div>' +
-        (c.estado === 'pend' ? '<div class="acciones"><button class="btn oro" data-acc="resolver" data-id="' + c.id + '" data-ok="1">Es válido</button>' +
-          '<button class="btn fantasma" data-acc="resolver" data-id="' + c.id + '" data-ok="0">Anular</button></div>' : '') + '</section>';
-    }).join('');
   }
   function nombreJurado() { return yo() ? yo().name : ''; }
   function dias() {
@@ -234,9 +225,9 @@
     var p = yo(), c = carton(p.id), n = sellos(p.id), lineas = lineasCompletas(p.id);
     var h = '';
     if (esJurado(p.id)) {
-      var np = pendientes(p.id).length + cantosPendientes(p.id).length;
+      var np = pendientes(p.id).length;
       h += '<a class="banner-jurado" href="#/jurado"><span class="ico" aria-hidden="true">⚖️</span><span><b>' + (p.admin ? 'Eres del jurado, como admin' : 'Te ha tocado jurado') + '</b><br>' +
-        (np ? np + (np === 1 ? ' cosa espera' : ' cosas esperan') + ' tu veredicto' : 'No hay nada por validar ahora mismo') + '</span></a>';
+        (np ? np + (np === 1 ? ' foto espera' : ' fotos esperan') + ' tu veredicto' : 'No hay fotos por validar ahora mismo') + '</span></a>';
     }
     h += banner();
     h += '<article class="ticket"><div class="ticket-top"><div><h2>Cartón de ' + esc(p.name) + '</h2><small>Quedada de Navidad · 26 dic 2026</small></div>' +
@@ -257,14 +248,15 @@
         '<span class="ico" aria-hidden="true">' + r.icono + '</span><span class="tit">' + esc(r.titulo) + '</span>' + sello + '</button>';
     });
     h += '</div></article><div class="acciones">';
-    var pendLinea = state.claims.some(function (x) { return x.playerId === p.id && x.tipo === 'linea' && x.estado === 'pend'; });
-    var pendBingo = state.claims.some(function (x) { return x.playerId === p.id && x.tipo === 'bingo' && x.estado === 'pend'; });
+    function botonCanto(tipo, texto) {
+      var f = estadoReto(p.id, tipo);
+      if (f && f.status === 'pend') return '<button class="btn oro" disabled>' + texto[1] + '</button>';
+      return '<button class="btn oro" data-acc="reto" data-id="' + tipo + '">' + (f && f.status === 'ko' ? texto[2] : texto[0]) + '</button>';
+    }
     if (n === 9 && !state.ganadores.bingo) {
-      h += '<button class="btn oro" data-acc="cantar" data-tipo="bingo"' + (pendBingo ? ' disabled' : '') + '>' +
-        (pendBingo ? 'Bingo cantado. El jurado lo está mirando' : '¡Cantar bingo!') + '</button>';
+      h += botonCanto('bingo', ['¡Cantar bingo con foto!', 'Bingo enviado. El jurado lo está mirando', 'Repetir la foto del bingo']);
     } else if (lineas.length && !state.ganadores.linea) {
-      h += '<button class="btn oro" data-acc="cantar" data-tipo="linea"' + (pendLinea ? ' disabled' : '') + '>' +
-        (pendLinea ? 'Línea cantada. El jurado la está mirando' : '¡Cantar línea!') + '</button>';
+      h += botonCanto('linea', ['¡Cantar línea con foto!', 'Línea enviada. El jurado la está mirando', 'Repetir la foto de la línea']);
     }
     h += '</div>';
     return h;
@@ -281,14 +273,9 @@
   }
 
   function vJurado() {
-    var p = yo(), pid = p ? p.id : null;
-    var nf = pendientes(pid).length, nc = cantosPendientes(pid).length;
-    var tabs = [['fotos', 'Fotos' + (nf ? ' (' + nf + ')' : '')], ['cantos', 'Cantos' + (nc ? ' (' + nc + ')' : '')]];
-    var h = '<section class="panel"><h2>Eres del jurado</h2><p>Sois 3: dos jugadores sorteados y el admin. Valida las fotos y los cantos de línea y bingo de tus colegas. Lo tuyo lo valida otra persona del jurado. Si dudas, rechaza y que lo repitan.</p></section>' +
-      '<div class="segmento" role="group" aria-label="Qué revisar">' + tabs.map(function (t) {
-        return '<button data-acc="jtab" data-tab="' + t[0] + '" aria-pressed="' + (juradoTab === t[0]) + '">' + t[1] + '</button>';
-      }).join('') + '</div>';
-    return h + (juradoTab === 'cantos' ? listaCantos(pid) : listaPendientes(pid));
+    var p = yo();
+    return '<section class="panel"><h2>Eres del jurado</h2><p>Sois 3: dos jugadores sorteados y el admin. Valida las fotos de tus colegas, también las de línea y bingo. Las tuyas las valida otra persona del jurado. Si dudas, rechaza y que la repitan.</p></section>' +
+      listaPendientes(p.id);
   }
 
   function vAdmin() {
@@ -298,7 +285,7 @@
     }).join('') + '</div>';
 
     if (adminTab === 'sorteo') {
-      h += '<section class="panel"><h3>Jurado de la quedada</h3><p>Dos jugadores al azar, más tú como admin (sois 3 en total). Los tres validan fotos y cantos de los demás, nunca los suyos. Los elegidos ven un banner en su cartón.</p>' +
+      h += '<section class="panel"><h3>Jurado de la quedada</h3><p>Dos jugadores al azar, más tú como admin (sois 3 en total). Los tres validan las fotos de los demás, incluidas las de línea y bingo, nunca las suyas. Los elegidos ven un banner en su cartón.</p>' +
         state.jurado.map(function (id) {
           return '<div class="fila"><div><b>' + esc(jugador(id).name) + '</b><small>Jugador sorteado</small></div><span class="etq ok">En el jurado</span></div>';
         }).join('') + '<div class="fila"><div><b>' + esc(admin().name) + '</b><small>Admin, siempre en el jurado</small></div><span class="etq ok">En el jurado</span></div>' +
@@ -375,38 +362,20 @@
   }
 
   var acciones = {
-    reto: function (d) { abrirReto(Number(d.id)); },
+    reto: function (d) { abrirReto(idReto(d.id)); },
     cerrar: function () { $modal.close(); },
     enviar: function (d) {
       var p = yo();
       if (!imgPendiente) return;
-      state.photos.push({ id: p.id + '-' + d.id + '-' + Date.now(), playerId: p.id, retoId: Number(d.id), status: 'pend', ts: Date.now(), img: imgPendiente });
+      state.photos.push({ id: p.id + '-' + d.id + '-' + Date.now(), playerId: p.id, retoId: idReto(d.id), status: 'pend', ts: Date.now(), img: imgPendiente });
       guardar(); $modal.close(); render();
       toast('Foto enviada. Ahora toca esperar al jurado.');
-    },
-    cantar: function (d) {
-      var p = yo();
-      state.claims.push({ id: 'c' + Date.now(), playerId: p.id, tipo: d.tipo, estado: 'pend', ts: Date.now() });
-      guardar(); render();
-      toast(d.tipo === 'bingo' ? '¡Bingo cantado!' : '¡Línea cantada!');
     },
     aprobar: function (d) { cambiarFoto(d.id, 'ok'); toast('Foto validada.'); },
     rechazar: function (d) { cambiarFoto(d.id, 'ko'); toast('Foto rechazada.'); },
     sortear: function () { state.jurado = sortear(state.players); guardar(); render(); toast('Jurado nuevo sorteado.'); },
     demoJurado: function () { state.session = { role: 'jugador', playerId: state.jurado[0] }; guardar(); location.hash = '#/carton'; render(); },
-    resolver: function (d) {
-      var c = state.claims.filter(function (x) { return x.id === d.id; })[0];
-      c.por = nombreJurado();
-      if (d.ok === '1') {
-        c.estado = 'ok';
-        if (!state.ganadores[c.tipo]) state.ganadores[c.tipo] = c.playerId;
-      } else {
-        c.estado = 'ko';
-      }
-      guardar(); render();
-    },
     tab: function (d) { adminTab = d.tab; render(); },
-    jtab: function (d) { juradoTab = d.tab; render(); },
     copiar: function (d) {
       var url = location.href.split('#')[0] + '#/entrar/' + d.token;
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -420,7 +389,12 @@
   };
   function cambiarFoto(id, estado) {
     var quien = nombreJurado();
-    state.photos.forEach(function (f) { if (f.id === id) { f.status = estado; f.por = quien; } });
+    state.photos.forEach(function (f) {
+      if (f.id !== id) return;
+      f.status = estado; f.por = quien;
+      // el primer canto validado de cada tipo se lleva el premio
+      if (estado === 'ok' && N.CANTOS[f.retoId] && !state.ganadores[f.retoId]) state.ganadores[f.retoId] = f.playerId;
+    });
     guardar(); render();
   }
 
