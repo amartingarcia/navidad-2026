@@ -20,6 +20,12 @@ create table if not exists public.enlaces (
   token      text not null unique
 );
 
+-- Server-side settings (e.g. default password). No policies and no grants: unreachable from clients.
+create table if not exists public.ajustes (
+  clave text primary key,
+  valor text not null
+);
+
 create table if not exists public.retos (
   id     text primary key,                        -- '1'..'n', plus 'linea' and 'bingo'
   icono  text not null,
@@ -137,7 +143,9 @@ begin
   values (new.id,
           coalesce(new.raw_user_meta_data ->> 'nombre', split_part(new.email, '@', 1)),
           coalesce((new.raw_user_meta_data ->> 'admin')::boolean, false));
-  insert into enlaces (jugador_id, token) values (new.id, split_part(new.email, '@', 1));
+  if new.email like '%@npgingo.local' then
+    insert into enlaces (jugador_id, token) values (new.id, split_part(new.email, '@', 1));
+  end if;
   return new;
 end $$;
 
@@ -154,10 +162,18 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Called by the client right after the player sets their own password.
+-- Fails if the password is still the default one (so the forced change cannot be skipped).
 create or replace function public.pass_cambiada() returns void
-language sql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, auth, extensions as $$
+declare v text; h text;
+begin
+  select valor into v from ajustes where clave = 'pass_defecto';
+  select encrypted_password into h from auth.users where id = auth.uid();
+  if v is not null and h = crypt(v, h) then
+    raise exception 'Tienes que elegir una contraseña distinta de la inicial';
+  end if;
   update jugadores set cambio_pass = false where id = auth.uid();
-$$;
+end $$;
 
 -- Jury ruling. Server-side checks: juror, not own photo, still pending, valuation time reached.
 create or replace function public.valorar(p_foto uuid, p_ok boolean) returns void
@@ -186,6 +202,18 @@ begin
 end $$;
 
 -- ───────────────────────── Admin RPCs ─────────────────────────
+
+-- Reset a player's password to the default one and force a new change (forgotten password).
+create or replace function public.resetear_pass(p_jugador uuid) returns void
+language plpgsql security definer set search_path = public, auth, extensions as $$
+declare v text;
+begin
+  if not es_admin() then raise exception 'Solo el admin'; end if;
+  select valor into v from ajustes where clave = 'pass_defecto';
+  if v is null then raise exception 'Falta ajustes.pass_defecto (lo carga seed-users.sh)'; end if;
+  update auth.users set encrypted_password = crypt(v, gen_salt('bf')) where id = p_jugador;
+  update jugadores set cambio_pass = true where id = p_jugador;
+end $$;
 
 -- Draw: admin always + 2 random players. DESTRUCTIVE for the previous draw (replaces it).
 create or replace function public.sortear_jurado() returns setof uuid
@@ -241,6 +269,7 @@ alter table public.jurado     enable row level security;
 alter table public.fotos      enable row level security;
 alter table public.reacciones enable row level security;
 alter table public.ganadores  enable row level security;
+alter table public.ajustes    enable row level security;   -- no policies: clients cannot read it
 
 -- Clients never write directly except photos / reactions (policies below); everything else goes via RPC.
 revoke all on all tables in schema public from anon, authenticated;
@@ -253,10 +282,10 @@ revoke all on function public.nombre_por_token(text) from public;
 grant execute on function public.nombre_por_token(text) to anon, authenticated;
 revoke all on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
                        public.repartir_cartones(boolean), public.puede_cantar(text, int),
-                       public.es_admin(), public.es_jurado() from public;
+                       public.es_admin(), public.es_jurado(), public.resetear_pass(uuid) from public;
 grant execute on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
                           public.repartir_cartones(boolean), public.puede_cantar(text, int),
-                          public.es_admin(), public.es_jurado() to authenticated;
+                          public.es_admin(), public.es_jurado(), public.resetear_pass(uuid) to authenticated;
 
 drop policy if exists jugadores_leer on public.jugadores;
 create policy jugadores_leer on public.jugadores for select to authenticated using (true);
