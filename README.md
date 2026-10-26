@@ -1,44 +1,58 @@
-# NPGingo (PoC)
+# NPGingo
 
 Bingo de retos con fotos para la quedada de Navidad de NPG (26 dic 2026, Jaraíz de la Vera).
 
-Esta PoC es solo interfaz: HTML, CSS y JS sin build ni backend. Los datos son de ejemplo y se guardan en el `localStorage` del navegador.
+Frontend estático (HTML, CSS y JS sin build) sobre Supabase (Auth, Postgres con RLS y Storage). Se despliega en Vercel desde `main`.
 
-## Ver en local
+## Acceso
+
+- **Portada pública:** solo el logo y «Entrar como administrador».
+- **Admin:** email y contraseña propios (usuario creado con `supabase/seed-users.sh`). Es también jugador y siempre está en el jurado.
+- **Jugadores:** enlace personal `…/#/entrar/<token>` + contraseña inicial. En el primer acceso la app obliga a elegir una nueva (el servidor rechaza dejarla igual).
+- Panel *Admin → Enlaces*: botón de WhatsApp por jugador (abre el chat con el enlace escrito), copiar enlace y resetear contraseña.
+- Registro público desactivado en Supabase: solo entran los usuarios creados por el admin.
+
+## Reglas del juego
+
+- Cartón 3x3 fijo por jugador: casilla central «Manteo a Maritsu» y 8 retos al azar del pool (`supabase/schema.sql`, tabla `retos`).
+- Solo cuentan las **filas horizontales**. Línea y bingo se cantan con foto, como cualquier reto.
+- Jurado: 2 jugadores al azar + el admin. Valida el primero que decide; nunca valida sus propias fotos. Para una línea ve las 3 fotos de la fila y para un bingo las 9.
+- Cada reto puede tener una hora mínima de valoración (`retos.desde`; el pibón de la noche, el 27 dic 12:00). La comprueba el servidor.
+- Muro común con las fotos validadas y reacciones ❤️ 😂 🍆 🔥 👍 🖕 🚀.
+
+## Seguridad
+
+- Todas las tablas exigen sesión (RLS); el rol anónimo no puede leer ni escribir nada salvo resolver un token a un nombre.
+- Fotos en un bucket privado con URLs firmadas de 1 h. Un jugador solo ve sus fotos y las validadas; el jurado, también las pendientes.
+- La contraseña inicial vive en `ajustes.pass_defecto`, tabla que ningún cliente puede leer. No está en el repo.
+- `config.js` solo lleva la URL y la clave *publishable* (pública por diseño). La `service_role` nunca va al repo ni al cliente.
+- CSP, `no-referrer`, `noindex` y cabeceras de seguridad en `index.html` y `vercel.json`.
+
+## Puesta en marcha
+
+1. Supabase: ejecutar `supabase/schema.sql` en el SQL Editor (idempotente).
+2. Supabase → Authentication: desactivar **Confirm email** y **Allow new users to sign up**; Site URL = URL de Vercel.
+3. Crear usuarios, desde tu máquina (secretos solo en variables de entorno):
+   ```bash
+   cp supabase/jugadores.example.txt supabase/jugadores.txt   # ajusta nombres (sin el admin)
+   export SUPABASE_URL=https://<ref>.supabase.co SERVICE_ROLE_KEY=… DEFAULT_PASS=… \
+          ADMIN_EMAIL=… ADMIN_PASS=… ADMIN_NAME=Adrián
+   ./supabase/seed-users.sh supabase/jugadores.txt
+   ```
+4. Entrar como admin → *Admin*: repartir cartones, sortear jurado y enviar los enlaces.
+
+## Desarrollo y pruebas
 
 ```bash
-python3 -m http.server 8080
-# abrir http://localhost:8080
+python3 -m http.server 8081          # sirve la web
+pip install playwright && playwright install chromium
+python3 tests/e2e_admin.py           # contra un Supabase simulado (tests/mock.py), sin red
+python3 tests/e2e_jugadores.py
 ```
 
-También funciona abriendo `index.html` directamente.
+El simulador reproduce las reglas de RLS y las funciones del esquema; no sustituye una prueba con el proyecto real.
 
-## Qué incluye
+## Pendiente
 
-- Pantalla de entrada con enlace personal (`#/entrar/<token>`): usuario, contraseña provisional y cambio obligatorio.
-- Cartón 3x3 con la casilla central fija (manteo a Maritsu) y 8 retos por jugador, repartidos de forma determinista.
-- Subida de foto por reto (cámara del móvil), con compresión en el cliente.
-- La línea es una fila horizontal (no valen columnas ni diagonales) y se marca con una barra dorada en el cartón. Línea y bingo se cantan con foto, como cualquier otro reto: al completar una línea o los 9 sellos aparece el botón, subes la foto y el jurado la valida (al valorar una línea ve las 3 fotos de esa fila y al valorar un bingo las 9 del cartón, con zoom al tocarlas). El primero en ser validado gana.
-- Admin: es un jugador más (tiene cartón) con funciones especiales: sorteo del jurado y enlaces personales.
-- Jurado: 2 jugadores al azar más el admin (3 en total). Los elegidos ven un banner en su cartón y una pestaña «Jurado» para validar las fotos de los demás (nunca las suyas).
-- Instalable en el móvil (manifest + iconos): «Añadir a pantalla de inicio» en Safari o Chrome.
-- Hora mínima: el pibón de la noche no se puede valorar hasta el día siguiente (27 dic, 12:00; se cambia en `data.js`, campo `desde`); el resto se valora en el momento; el jugador puede subir la foto antes. En *Admin → Reloj de prueba* se simula la hora de la quedada para probarlo.
-- Muro común con las fotos validadas de todos y reacciones (❤️ 😂 🍆 🔥 👍 🖕 🚀) que cualquier jugador puede poner o quitar. Más panel de admin (sorteo del jurado y enlaces).
-
-## Lo que no hace todavía
-
-- No hay login real ni base de datos: cualquier contraseña vale y el estado vive solo en el navegador de cada móvil, así que **no se sincroniza entre teléfonos**. Para usarlo en la quedada hace falta backend.
-- Los retos son los 12 de la primera iteración (faltan unos 18 para el pool de 30).
-- No hay reparto equilibrado por dificultad y franja.
-
-## Backend (preparado, sin conectar)
-
-`supabase/schema.sql` define tablas, RLS, funciones (sorteo del jurado, valoración, reparto de cartones) y el bucket privado de fotos. Ya está aplicado en el proyecto de Supabase y los ajustes públicos están en `config.js`. La app sigue en modo PoC (localStorage) hasta que se conecte el login con usuarios reales.
-
-## Publicar en GitHub Pages
-
-En *Settings → Pages* elige *Deploy from a branch*, rama `main` y carpeta `/ (root)`. GitHub despliega solo en cada push, sin workflow propio. En repos privados, Pages requiere un plan de pago.
-
-## Datos de ejemplo
-
-Edita `data.js` (retos y jugadores). Botón «Reiniciar datos de ejemplo» en la pantalla de entrada para restaurar el estado.
+- Completar el pool hasta ~30 retos y confirmar la hora mínima del pibón.
+- Regla opcional de mayoría (2 de 3) en el jurado.

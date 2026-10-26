@@ -139,10 +139,12 @@ end $$;
 create or replace function public.nuevo_usuario() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  insert into jugadores (id, nombre, es_admin)
+  -- Players (synthetic @npgingo.local email) must change the initial password; the admin chose hers.
+  insert into jugadores (id, nombre, es_admin, cambio_pass)
   values (new.id,
           coalesce(new.raw_user_meta_data ->> 'nombre', split_part(new.email, '@', 1)),
-          coalesce((new.raw_user_meta_data ->> 'admin')::boolean, false));
+          coalesce((new.raw_user_meta_data ->> 'admin')::boolean, false),
+          new.email like '%@npgingo.local');
   if new.email like '%@npgingo.local' then
     insert into enlaces (jugador_id, token) values (new.id, split_part(new.email, '@', 1));
   end if;

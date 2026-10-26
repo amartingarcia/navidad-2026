@@ -212,3 +212,8 @@ button, a { touch-action: manipulation; }
   pointer-events: none; overflow: visible;
 }
 .cab { padding-top: 14px; }
+
+/* Login y panel de enlaces */
+.error { color: #ff9aa5; font-size: 14px; margin: 0 0 10px; }
+.btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.campo input[data-msgpass] { min-height: 40px; }

@@ -1,133 +1,102 @@
-/* NPGingo · PoC sin backend. Todo el estado vive en localStorage del navegador. */
+/* NPGingo · frontend. Datos y login en Supabase (api.js); aquí solo vistas y reglas de presentación. */
 (function () {
   'use strict';
 
-  var N = window.NPG;
-  var RETOS = N.RETOS;
-  var KEY = 'npgingo.poc.v2';
-  var JURADO_JUGADORES = 2; // más el admin: 3 en total
-  // Solo cuentan las filas horizontales: ni columnas ni diagonales.
-  var LINEAS = [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
+  var N = window.NPG, API = window.NPGAPI;
+  var DOMINIO = '@npgingo.local';
+  var LINEAS = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]; // solo cuentan filas horizontales
   var $app = document.getElementById('app');
   var $modal = document.getElementById('modal');
   var $toast = document.getElementById('toast');
-  var state;
   var adminTab = 'sorteo';
   var imgPendiente = null;
+  var msgPass = '';          // contraseña inicial a incluir en el mensaje de WhatsApp (no se guarda)
+  var L = { token: '', nombre: null, estado: '', error: '', ocupado: false }; // pantalla de entrada
+
+  // Estado de juego cargado desde el servidor.
+  var S = { cargado: false, me: null, players: [], retos: {}, cartones: {}, jurado: [], photos: [], reacciones: {}, ganadores: { linea: null, bingo: null }, enlaces: {}, firma: '' };
 
   /* ---------- utilidades ---------- */
-  function rng(seed) {
-    return function () {
-      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  function mezclar(a, r) {
-    a = a.slice();
-    for (var i = a.length - 1; i > 0; i--) {
-      var j = Math.floor(r() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t;
-    }
-    return a;
-  }
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function reto(id) { return N.CANTOS[id] || RETOS.filter(function (r) { return r.id === id; })[0]; }
-  function idReto(v) { return N.CANTOS[v] ? v : Number(v); }
   function hora(ts) { return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); }
   function toast(msg) {
     $toast.textContent = msg;
     $toast.classList.add('on');
     clearTimeout(toast.t);
-    toast.t = setTimeout(function () { $toast.classList.remove('on'); }, 2600);
+    toast.t = setTimeout(function () { $toast.classList.remove('on'); }, 3200);
   }
-  function placeholder(emoji, color) {
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" fill="' + color +
-      '"/><text x="200" y="185" font-size="120" text-anchor="middle">' + emoji + '</text></svg>';
-    return 'data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27');
+  function msgError(e) {
+    if (!e) return 'Algo ha fallado.';
+    if (e.status === undefined) return 'Sin conexión con el servidor. Reintenta en un momento.';
+    return e.message || 'Algo ha fallado.';
   }
   function urlBg(img) { return 'background-image:url(&quot;' + img + '&quot;)'; }
+  function enlace(token) { return location.origin + location.pathname + '#/entrar/' + token; }
 
-  /* ---------- estado ---------- */
-  function token(id) {
-    var r = rng(id * 104729 + 7), s = '';
-    for (var i = 0; i < 8; i++) s += Math.floor(r() * 36).toString(36);
-    return s;
-  }
-  function semilla() {
-    var ahora = Date.now();
-    var jugadores = N.JUGADORES.map(function (n, i) {
-      var t = token(i + 1);
-      return {
-        id: i + 1, name: n, admin: n === N.ADMIN, token: t, pass: 'npg-' + t.slice(0, 4), cambiada: i < 8,
-        user: n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-      };
+  /* ---------- carga de datos ---------- */
+  function cargarTodo() {
+    var ses = API.sesion();
+    return Promise.all([
+      API.get('jugadores', 'select=id,nombre,es_admin,cambio_pass&order=nombre'),
+      API.get('retos', 'select=id,icono,titulo,franja,tipo,fijo,pista,desde'),
+      API.get('cartones', 'select=jugador_id,celdas'),
+      API.get('jurado', 'select=jugador_id'),
+      API.get('fotos', 'select=id,jugador_id,reto,fila,ruta,estado,creada,valorada_por&order=creada.asc'),
+      API.get('reacciones', 'select=foto_id,jugador_id,emoji'),
+      API.get('ganadores', 'select=tipo,foto_id'),
+      API.get('enlaces', 'select=jugador_id,token')
+    ]).then(function (r) {
+      var jugadores = r[0], fotos = r[4];
+      var yoFila = jugadores.filter(function (j) { return j.id === ses.user_id; })[0];
+      if (!yoFila) throw new Error('Tu usuario no tiene ficha de jugador. Avisa al admin.');
+      return API.urls(fotos.map(function (f) { return f.ruta; })).then(function (urls) {
+        var nuevo = {
+          cargado: true,
+          me: { id: yoFila.id, name: yoFila.nombre, admin: yoFila.es_admin, cambio: yoFila.cambio_pass },
+          players: jugadores.map(function (j) { return { id: j.id, name: j.nombre, admin: j.es_admin, cambio: j.cambio_pass }; }),
+          retos: {}, cartones: {}, jurado: r[3].map(function (x) { return x.jugador_id; }), photos: [], reacciones: {},
+          ganadores: { linea: null, bingo: null }, enlaces: {}
+        };
+        r[1].forEach(function (x) { nuevo.retos[x.id] = x; });
+        r[2].forEach(function (x) { nuevo.cartones[x.jugador_id] = x.celdas; });
+        var nombre = {};
+        nuevo.players.forEach(function (p) { nombre[p.id] = p.name; });
+        nuevo.photos = fotos.map(function (f) {
+          return { id: f.id, playerId: f.jugador_id, retoId: f.reto, fila: f.fila, ruta: f.ruta, status: f.estado,
+            ts: Date.parse(f.creada), img: urls[f.ruta] ? urls[f.ruta].url : '', por: f.valorada_por ? nombre[f.valorada_por] : '' };
+        });
+        r[5].forEach(function (x) {
+          var m = nuevo.reacciones[x.foto_id] || (nuevo.reacciones[x.foto_id] = {});
+          (m[x.emoji] || (m[x.emoji] = [])).push(x.jugador_id);
+        });
+        r[6].forEach(function (g) {
+          var f = nuevo.photos.filter(function (x) { return x.id === g.foto_id; })[0];
+          if (f) nuevo.ganadores[g.tipo] = f.playerId;
+        });
+        r[7].forEach(function (x) { nuevo.enlaces[x.jugador_id] = x.token; });
+        // Huella de lo que se ve (sin las URLs firmadas, que cambian): evita repintar si nada ha cambiado.
+        nuevo.firma = JSON.stringify([nuevo.me, nuevo.players, nuevo.cartones, nuevo.jurado, nuevo.reacciones, nuevo.ganadores,
+          nuevo.photos.map(function (f) { return [f.id, f.status, f.por]; })]);
+        var cambio = nuevo.firma !== S.firma;
+        S = nuevo;
+        return cambio;
+      });
     });
-    var s = { session: null, players: jugadores, photos: [], reacciones: {}, offset: 0, ganadores: { linea: null, bingo: null }, jurado: sortear(jugadores) };
-    var colores = ['#1E6B4A', '#D4283C', '#18304F', '#8a5a00', '#5b2a86'];
-    function foto(pid, rid, estado, min) {
-      s.photos.push({ id: pid + '-' + rid + '-' + min, playerId: pid, retoId: rid, status: estado,
-        ts: ahora - min * 60000, img: placeholder(reto(rid).icono, colores[(pid + rid) % colores.length]) });
-    }
-    // Dani (id 1) arranca con la fila de arriba validada para ver el flujo de "línea".
-    var cDani = carton(1);
-    [0, 1, 2].forEach(function (i, k) { foto(1, cDani[i], 'ok', 90 - k * 10); });
-    jugadores.slice(1, 8).forEach(function (p, k) {
-      var c = carton(p.id);
-      foto(p.id, c[0], 'ok', 70 - k * 5);
-      if (k < 4) foto(p.id, c[1], 'pend', 15 - k * 3);
-    });
-    // Algunas reacciones de ejemplo en las primeras fotos validadas.
-    var vistas = s.photos.filter(function (f) { return f.status === 'ok'; }).slice(0, 4);
-    vistas.forEach(function (f, i) {
-      s.reacciones[f.id] = { '😂': [2, 3, 4, 5].slice(0, 4 - i), '🔥': i % 2 ? [6] : [6, 7] };
-    });
-    return s;
-  }
-  function cargar() {
-    try {
-      var raw = localStorage.getItem(KEY);
-      if (raw) {
-        var s = JSON.parse(raw);
-        if (!s.reacciones) s.reacciones = {};
-        if (typeof s.offset !== 'number') s.offset = 0;
-        s.players.forEach(function (p) { p.admin = p.name === N.ADMIN; });
-        var adm = s.players.filter(function (p) { return p.admin; })[0];
-        if (s.session && s.session.role === 'admin') s.session = adm ? { role: 'jugador', playerId: adm.id } : null;
-        // datos guardados con otro tamaño de jurado, o con el admin sorteado como jugador
-        if (!s.jurado || s.jurado.length !== JURADO_JUGADORES || (adm && s.jurado.indexOf(adm.id) !== -1)) {
-          s.jurado = sortear(s.players);
-          localStorage.setItem(KEY, JSON.stringify(s)); // fija el sorteo para que no cambie al recargar
-        }
-        return s;
-      }
-    } catch (e) { /* sin almacenamiento: sigue en memoria */ }
-    return semilla();
-  }
-  // Jurado: 2 jugadores al azar sin contar al admin, que siempre está dentro (3 en total).
-  function sortear(jugadores) {
-    return mezclar(jugadores.filter(function (p) { return !p.admin; }).map(function (p) { return p.id; }), Math.random).slice(0, JURADO_JUGADORES);
-  }
-  function guardar() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
-    catch (e) { toast('Memoria llena: no se ha podido guardar la última foto.'); }
   }
 
   /* ---------- lógica del juego ---------- */
-  function carton(pid) {
-    var fijo = RETOS.filter(function (r) { return r.fijo; })[0].id;
-    var pool = mezclar(RETOS.filter(function (r) { return !r.fijo; }).map(function (r) { return r.id; }), rng(pid * 7919 + 13)).slice(0, 8);
-    var celdas = [], k = 0;
-    for (var i = 0; i < 9; i++) celdas.push(i === 4 ? fijo : pool[k++]);
-    return celdas;
+  function reto(id) {
+    return S.retos[String(id)] || { id: String(id), icono: '❔', titulo: 'Reto', franja: '', tipo: 'individual', pista: '' };
   }
+  function esCanto(id) { return id === 'linea' || id === 'bingo'; }
+  function carton(pid) { return S.cartones[pid] || null; }
   function estadoReto(pid, rid) {
     var orden = { ok: 3, pend: 2, ko: 1 }, mejor = null;
-    state.photos.forEach(function (f) {
+    S.photos.forEach(function (f) {
       if (f.playerId !== pid || f.retoId !== rid) return;
       if (!mejor || orden[f.status] > orden[mejor.status] || (orden[f.status] === orden[mejor.status] && f.ts > mejor.ts)) mejor = f;
     });
@@ -135,60 +104,55 @@
   }
   function lineasCompletas(pid) {
     var c = carton(pid);
+    if (!c) return [];
     return LINEAS.filter(function (l) {
       return l.every(function (i) { var f = estadoReto(pid, c[i]); return f && f.status === 'ok'; });
     });
   }
   function sellos(pid) {
-    return carton(pid).filter(function (rid) { var f = estadoReto(pid, rid); return f && f.status === 'ok'; }).length;
+    var c = carton(pid);
+    return c ? c.filter(function (rid) { var f = estadoReto(pid, rid); return f && f.status === 'ok'; }).length : 0;
   }
-  function jugador(id) { return state.players.filter(function (p) { return p.id === id; })[0]; }
-  function yo() { return state.session && state.session.role === 'jugador' ? jugador(state.session.playerId) : null; }
-  function soyAdmin() { var p = yo(); return !!p && !!p.admin; }
-  function admin() { return state.players.filter(function (p) { return p.admin; })[0]; }
-  function esJurado(pid) { var p = jugador(pid); return state.jurado.indexOf(pid) !== -1 || !!(p && p.admin); }
-  function soyJurado() { var p = yo(); return !!p && esJurado(p.id); }
+  function jugador(id) { return S.players.filter(function (p) { return p.id === id; })[0] || { id: id, name: '?' }; }
+  function yo() { return S.me; }
+  function soyAdmin() { return !!S.me && S.me.admin; }
+  function esJurado(pid) { var p = jugador(pid); return S.jurado.indexOf(pid) !== -1 || !!p.admin; }
+  function soyJurado() { return !!S.me && esJurado(S.me.id); }
+  function numero(pid) { return S.players.map(function (p) { return p.id; }).indexOf(pid) + 1; }
   function pendientes(excluirPid) {
-    return state.photos.filter(function (f) { return f.status === 'pend' && f.playerId !== excluirPid; })
+    return S.photos.filter(function (f) { return f.status === 'pend' && f.playerId !== excluirPid; })
       .sort(function (a, b) { return a.ts - b.ts; });
   }
+  // Hora mínima de valoración: la comprueba el servidor; aquí solo se avisa en pantalla.
+  function desdeTs(r) { return r && r.desde ? Date.parse(r.desde) : null; }
+  function desdeTxt(r) {
+    var t = new Date(desdeTs(r)), dia = new Date(N.EVENTO.fecha + 'T00:00:00');
+    var otro = t.toDateString() !== dia.toDateString();
+    return 'las ' + hora(t) + (otro ? ' del ' + t.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '') : '');
+  }
+  function valorable(f) { var t = desdeTs(reto(f.retoId)); return t === null || Date.now() >= t; }
+  function dias() { return Math.ceil((new Date(N.EVENTO.fecha + 'T00:00:00') - new Date()) / 86400000); }
+
   function listaPendientes(excluirPid) {
     var pend = pendientes(excluirPid).sort(function (a, b) { return (valorable(b) ? 1 : 0) - (valorable(a) ? 1 : 0); });
     if (!pend.length) return '<div class="vacio">No hay fotos por validar. Descansa un rato.</div>';
     return '<div class="muro">' + pend.map(function (f) {
       var r = reto(f.retoId), pid = f.playerId, rev = '', libre = valorable(f);
       if (r.tipo === 'canto') {
-        var c = carton(pid), ids = r.id === 'linea' ? LINEAS[f.fila || 0].map(function (i) { return c[i]; }) : c;
+        var c = carton(pid) || [], ids = r.id === 'linea' ? LINEAS[f.fila || 0].map(function (i) { return c[i]; }) : c;
         rev = '<p class="rev-tit">Revisa ' + (r.id === 'linea' ? 'las 3 fotos de la fila' : 'las 9 fotos del cartón') + '. Toca una para verla grande.</p><div class="rev">' +
           ids.map(function (rid) {
             var g = estadoReto(pid, rid);
-            return g ? '<button class="rev-foto" data-acc="ver" data-fid="' + esc(g.id) + '"><img src="' + g.img + '" alt=""><span>' + esc(reto(rid).titulo) + '</span></button>' : '';
+            return g ? '<button class="rev-foto" data-acc="ver" data-fid="' + esc(g.id) + '"><img src="' + esc(g.img) + '" alt=""><span>' + esc(reto(rid).titulo) + '</span></button>' : '';
           }).join('') + '</div>';
       }
-      return '<figure class="foto-card"><img src="' + f.img + '" alt="' + esc(r.titulo) + '">' +
+      return '<figure class="foto-card"><img src="' + esc(f.img) + '" alt="' + esc(r.titulo) + '">' +
         '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small>' + rev + '</figcaption>' +
         (libre
           ? '<div class="acc"><button class="btn mini" data-acc="aprobar" data-id="' + esc(f.id) + '">Validar</button>' +
             '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div>'
           : '<p class="bloqueo">🔒 Se puede valorar desde ' + desdeTxt(r) + '</p>') + '</figure>';
     }).join('') + '</div>';
-  }
-  // Reloj: en la PoC el admin puede simular la hora de la quedada para probar las horas mínimas.
-  function ahora() { return Date.now() + ((state && state.offset) || 0); }
-  function desdeTs(r) {
-    if (!r || !r.desde) return null;
-    var f = new Date(N.EVENTO.fecha + 'T' + r.desde.hora + ':00');
-    f.setDate(f.getDate() + (r.desde.dia || 0));
-    return f.getTime();
-  }
-  function desdeTxt(r) {
-    return 'las ' + r.desde.hora + (r.desde.dia ? ' del ' + new Date(desdeTs(r)).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '') : '');
-  }
-  function valorable(f) { var t = desdeTs(reto(f.retoId)); return t === null || ahora() >= t; }
-  function nombreJurado() { return yo() ? yo().name : ''; }
-  function dias() {
-    var d = Math.ceil((new Date(N.EVENTO.fecha + 'T00:00:00') - new Date()) / 86400000);
-    return d;
   }
 
   /* ---------- vistas ---------- */
@@ -200,6 +164,7 @@
       '<rect x="8" y="72" width="86" height="22" rx="11" fill="#F4F7FB"/><circle cx="73" cy="13" r="10" fill="#F4F7FB"/></svg></span>' +
       '<span aria-hidden="true">PGingo</span></h1>';
   }
+
   function cabecera() {
     var d = dias();
     var cuenta = d > 0
@@ -214,39 +179,47 @@
     if (soyAdmin()) items.splice(items.length - 1, 0, ['admin', '🛠️', 'Admin']);
     return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + items.map(function (it) {
       return '<a href="#/' + it[0] + '"' + (ruta === it[0] ? ' aria-current="page"' : '') + '><span aria-hidden="true">' + it[1] + '</span>' + it[2] + '</a>';
-    }).join('') + '<a href="#/salir" data-acc="salir"><span aria-hidden="true">🚪</span>Salir</a></div></nav>';
+    }).join('') + '<a href="#/salir"><span aria-hidden="true">🚪</span>Salir</a></div></nav>';
   }
 
-  function vEntrar(tok) {
-    var h = '<main class="entrada">' + logo() + '<p class="lema">No preguntes, gilipollas · Bingo de Navidad</p>';
-    var p = tok ? state.players.filter(function (x) { return x.token === tok; })[0] : null;
-    if (tok && !p) {
-      h += '<section class="panel"><h2>Este enlace no vale</h2><p>Puede que esté mal copiado o que el admin lo haya cambiado. Pídele uno nuevo.</p></section>';
-    } else if (p && !p.cambiada) {
-      h += '<section class="panel"><h2>Hola, ' + esc(p.name) + '</h2><p>Es tu primera vez. Cambia la contraseña provisional para entrar.</p>' +
-        '<div class="dato"><span>Usuario</span><b>' + esc(p.user) + '</b></div>' +
-        '<div class="dato"><span>Contraseña provisional</span><b>' + esc(p.pass) + '</b></div></section>' +
-        '<form class="panel" data-form="clave" data-token="' + esc(p.token) + '">' +
-        '<label class="campo"><span>Contraseña nueva (mínimo 6 caracteres)</span><input name="a" type="password" minlength="6" autocomplete="new-password" required></label>' +
-        '<label class="campo"><span>Repite la contraseña</span><input name="b" type="password" minlength="6" autocomplete="new-password" required></label>' +
-        '<button class="btn oro ancho" type="submit">Guardar y entrar</button></form>';
-    } else if (p) {
-      h += '<form class="panel" data-form="login" data-token="' + esc(p.token) + '"><h2>Hola, ' + esc(p.name) + '</h2>' +
-        '<label class="campo"><span>Contraseña</span><input name="a" type="password" autocomplete="current-password" required></label>' +
-        '<button class="btn oro ancho" type="submit">Entrar</button></form>';
-    } else {
-      h += '<section class="panel"><h2>Entra con tu enlace</h2><p>El admin te pasa un enlace personal con tu usuario. Ábrelo desde el móvil y listo.</p></section>';
+  /* ----- pantallas de entrada: solo el logo y lo imprescindible ----- */
+  function errorL() { return L.error ? '<p class="error" role="alert">' + esc(L.error) + '</p>' : ''; }
+  function entrada(cuerpo) {
+    return '<main class="entrada">' + logo() + '<p class="lema">No preguntes, gilipollas · Bingo de Navidad</p>' + cuerpo + '</main>';
+  }
+  function vPortada() {
+    return entrada('<section class="panel"><button class="btn oro ancho" data-acc="verAcceso">Entrar como administrador</button></section>');
+  }
+  function vAcceso() {
+    return entrada('<form class="panel" data-form="admin"><h2>Administrador</h2>' +
+      '<label class="campo"><span>Email</span><input name="e" type="email" autocomplete="username" value="' + esc(L.email || '') + '" required></label>' +
+      '<label class="campo"><span>Contraseña</span><input name="a" type="password" autocomplete="current-password" required></label>' + errorL() +
+      '<button class="btn oro ancho" type="submit"' + (L.ocupado ? ' disabled' : '') + '>' + (L.ocupado ? 'Entrando…' : 'Entrar') + '</button>' +
+      '<button class="btn fantasma ancho" type="button" data-acc="volver" style="margin-top:10px">Volver</button></form>');
+  }
+  function vToken(tok) {
+    if (L.token !== tok || L.cargando) return entrada('<section class="panel"><p>Comprobando tu enlace…</p></section>');
+    if (!L.nombre) {
+      return entrada('<section class="panel"><h2>Este enlace no vale</h2><p>' + (L.error ? esc(L.error) : 'Puede que esté mal copiado o que el admin lo haya cambiado. Pídele uno nuevo.') + '</p></section>');
     }
-    h += '<section class="panel"><h3>Probar la PoC</h3><p>Sin backend: los datos son de ejemplo y se guardan solo en este navegador.</p>' +
-      '<div class="acciones"><button class="btn oro" data-acc="demoJugador">Entrar como Dani (jugador)</button>' +
-      '<button class="btn fantasma" data-acc="demoJurado">Entrar como jurado (' + esc(jugador(state.jurado[0]).name) + ')</button>' +
-      '<button class="btn fantasma" data-acc="demoAdmin">Entrar como admin (' + esc(admin().name) + ')</button>' +
-      '<button class="btn fantasma" data-acc="reiniciar">Reiniciar datos de ejemplo</button></div></section></main>';
-    return h;
+    return entrada('<form class="panel" data-form="login" data-token="' + esc(tok) + '"><h2>Hola, ' + esc(L.nombre) + '</h2>' +
+      (L.estado === 'primera' ? '<p>Si es tu primera vez, entra con la contraseña inicial que te ha pasado el admin. Después tendrás que elegir la tuya.</p>' : '') +
+      '<label class="campo"><span>Contraseña</span><input name="a" type="password" autocomplete="current-password" required></label>' + errorL() +
+      '<button class="btn oro ancho" type="submit"' + (L.ocupado ? ' disabled' : '') + '>' + (L.ocupado ? 'Entrando…' : 'Entrar') + '</button></form>');
   }
+  function vClave() {
+    return entrada('<form class="panel" data-form="clave"><h2>Hola, ' + esc(S.me.name) + '</h2>' +
+      '<p>Elige tu contraseña. Tiene que ser distinta de la inicial y tener al menos 8 caracteres.</p>' +
+      '<label class="campo"><span>Contraseña nueva</span><input name="a" type="password" minlength="8" autocomplete="new-password" required></label>' +
+      '<label class="campo"><span>Repite la contraseña</span><input name="b" type="password" minlength="8" autocomplete="new-password" required></label>' + errorL() +
+      '<button class="btn oro ancho" type="submit"' + (L.ocupado ? ' disabled' : '') + '>' + (L.ocupado ? 'Guardando…' : 'Guardar y entrar') + '</button>' +
+      '<button class="btn fantasma ancho" type="button" data-acc="salirYa" style="margin-top:10px">Salir</button></form>');
+  }
+  function vCargando() { return entrada('<section class="panel"><p>Cargando…</p></section>'); }
 
+  /* ----- juego ----- */
   function banner() {
-    var g = state.ganadores, t = '';
+    var g = S.ganadores, t = '';
     if (g.linea) t += '<strong>Línea:</strong> ' + esc(jugador(g.linea).name) + ' 🏆 ';
     if (g.bingo) t += '<strong>Bingo:</strong> ' + esc(jugador(g.bingo).name) + ' 🏆';
     if (!t) t = '<strong>Sin línea ni bingo todavía.</strong> Gana quien lo cante primero y el jurado lo valide.';
@@ -262,8 +235,13 @@
         (np ? np + (np === 1 ? ' foto espera' : ' fotos esperan') + ' tu veredicto' : 'No hay fotos que valorar ahora mismo') + '</span></a>';
     }
     h += banner();
+    if (!c) {
+      return h + '<section class="panel"><h2>Tu cartón está en camino</h2><p>' + (p.admin
+        ? 'Aún no has repartido los cartones. Hazlo desde Admin.'
+        : 'El admin todavía no ha repartido los cartones. Vuelve en un rato.') + '</p></section>';
+    }
     h += '<article class="ticket"><div class="ticket-top"><div><h2>Cartón de ' + esc(p.name) + '</h2><small>Quedada de Navidad · 26 dic 2026</small></div>' +
-      '<div class="serie" aria-label="Número de cartón">Nº ' + String(p.id).padStart(3, '0') + '</div></div><div class="perf"></div>' +
+      '<div class="serie" aria-label="Número de cartón">Nº ' + String(numero(p.id)).padStart(3, '0') + '</div></div><div class="perf"></div>' +
       '<div class="progreso"><span>' + n + ' de 9 sellos validados</span><span>Línea = una fila horizontal</span></div><div class="grid">';
     c.forEach(function (rid, i) {
       if (i % 3 === 0) {
@@ -279,8 +257,8 @@
         sello = '<span class="sello">' + { ok: 'OK', pend: 'En revisión', ko: 'Repite' }[f.status] + '</span>';
         etiqueta = { ok: ', validado', pend: ', pendiente de validar', ko: ', rechazado' }[f.status];
       }
-      h += '<button class="' + cls + '" data-acc="reto" data-id="' + rid + '" aria-label="' + esc(r.titulo + etiqueta) + '">' +
-        (f ? '<span class="foto" style="' + urlBg(f.img) + '"></span>' : '') +
+      h += '<button class="' + cls + '" data-acc="reto" data-id="' + esc(rid) + '" aria-label="' + esc(r.titulo + etiqueta) + '">' +
+        (f && f.img ? '<span class="foto" style="' + urlBg(f.img) + '"></span>' : '') +
         '<span class="ico" aria-hidden="true">' + r.icono + '</span><span class="tit">' + esc(r.titulo) + '</span>' + sello + '</button>';
       if (i % 3 === 2) h += '</div>';
     });
@@ -290,9 +268,9 @@
       if (f && f.status === 'pend') return '<button class="btn oro" disabled>' + texto[1] + '</button>';
       return '<button class="btn oro" data-acc="reto" data-id="' + tipo + '">' + (f && f.status === 'ko' ? texto[2] : texto[0]) + '</button>';
     }
-    if (n === 9 && !state.ganadores.bingo) {
+    if (n === 9 && !S.ganadores.bingo) {
       h += botonCanto('bingo', ['¡Cantar bingo con foto!', 'Bingo enviado. El jurado lo está mirando', 'Repetir la foto del bingo']);
-    } else if (lineas.length && !state.ganadores.linea) {
+    } else if (lineas.length && !S.ganadores.linea) {
       h += botonCanto('linea', ['¡Cantar línea con foto!', 'Línea enviada. El jurado la está mirando', 'Repetir la foto de la línea']);
     }
     h += '</div>';
@@ -300,7 +278,7 @@
   }
 
   function barraReacciones(f) {
-    var yoId = yo() ? yo().id : null, rs = state.reacciones[f.id] || {};
+    var yoId = yo().id, rs = S.reacciones[f.id] || {};
     return '<div class="reacciones" role="group" aria-label="Reacciones">' + N.REACCIONES.map(function (e) {
       var quienes = rs[e] || [], mia = quienes.indexOf(yoId) !== -1;
       return '<button class="reac" data-acc="reaccion" data-id="' + esc(f.id) + '" data-e="' + e + '" aria-pressed="' + mia + '" aria-label="' + e + ', ' + quienes.length + '">' +
@@ -309,51 +287,51 @@
   }
 
   function vMuro() {
-    var oks = state.photos.filter(function (f) { return f.status === 'ok'; }).sort(function (a, b) { return b.ts - a.ts; });
+    var oks = S.photos.filter(function (f) { return f.status === 'ok'; }).sort(function (a, b) { return b.ts - a.ts; });
     if (!oks.length) return '<div class="vacio">Aún no hay fotos validadas. La primera la sube alguien con valor.</div>';
     return '<div class="muro">' + oks.map(function (f) {
       var r = reto(f.retoId);
-      return '<figure class="foto-card"><img src="' + f.img + '" alt="' + esc(r.titulo) + '" loading="lazy">' +
+      return '<figure class="foto-card"><img src="' + esc(f.img) + '" alt="' + esc(r.titulo) + '" loading="lazy">' +
         '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + ' · ' + hora(f.ts) + (f.por ? '<br><small>Validada por ' + esc(f.por) + '</small>' : '') + '</figcaption>' + barraReacciones(f) + '</figure>';
     }).join('') + '</div>';
   }
 
   function vJurado() {
-    var p = yo();
     return '<section class="panel"><h2>Eres del jurado</h2><p>Sois 3: dos jugadores sorteados y el admin. Valida las fotos de tus colegas, también las de línea y bingo. Las tuyas las valida otra persona del jurado. Si dudas, rechaza y que la repitan.</p></section>' +
-      listaPendientes(p.id);
+      listaPendientes(yo().id);
   }
 
   function vAdmin() {
-    var tabs = [['sorteo', 'Sorteo'], ['reloj', 'Reloj de prueba'], ['enlaces', 'Enlaces']];
+    var tabs = [['sorteo', 'Jurado y cartones'], ['enlaces', 'Enlaces']];
     var h = '<div class="segmento" role="group" aria-label="Secciones del admin">' + tabs.map(function (t) {
       return '<button data-acc="tab" data-tab="' + t[0] + '" aria-pressed="' + (adminTab === t[0]) + '">' + t[1] + '</button>';
     }).join('') + '</div>';
 
     if (adminTab === 'sorteo') {
+      var adm = S.players.filter(function (p) { return p.admin; })[0];
+      var sorteados = S.jurado.filter(function (id) { return !jugador(id).admin; });
+      var repartidos = Object.keys(S.cartones).length;
       h += '<section class="panel"><h3>Jurado de la quedada</h3><p>Dos jugadores al azar, más tú como admin (sois 3 en total). Los tres validan las fotos de los demás, incluidas las de línea y bingo, nunca las suyas. Los elegidos ven un banner en su cartón.</p>' +
-        state.jurado.map(function (id) {
+        (sorteados.length ? sorteados.map(function (id) {
           return '<div class="fila"><div><b>' + esc(jugador(id).name) + '</b><small>Jugador sorteado</small></div><span class="etq ok">En el jurado</span></div>';
-        }).join('') + '<div class="fila"><div><b>' + esc(admin().name) + '</b><small>Admin, siempre en el jurado</small></div><span class="etq ok">En el jurado</span></div>' +
-        '<button class="btn oro ancho" style="margin-top:12px" data-acc="sortear">Sortear de nuevo</button></section>';
-    }
-
-    if (adminTab === 'reloj') {
-      var t = new Date(ahora()), pad = function (n) { return String(n).padStart(2, '0'); };
-      var valor = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()) + 'T' + pad(t.getHours()) + ':' + pad(t.getMinutes());
-      h += '<form class="panel" data-form="reloj"><h3>Reloj de prueba</h3><p>Solo para probar en la PoC: simula la hora de la quedada para ver cuándo se desbloquean los retos con hora mínima. Se quita en la versión real.</p>' +
-        '<label class="campo"><span>Fecha y hora simuladas</span><input name="t" type="datetime-local" value="' + valor + '" required></label>' +
-        '<div class="acciones"><button class="btn oro" type="submit">Simular esta hora</button><button class="btn fantasma" type="button" data-acc="reloj">Volver a la hora real</button></div></form>' +
-        '<section class="panel"><h3>Horas mínimas de valoración</h3>' + RETOS.filter(function (x) { return x.desde; }).map(function (x) {
-          return '<div class="fila"><div><b>' + x.icono + ' ' + esc(x.titulo) + '</b></div><span class="etq ' + (ahora() >= desdeTs(x) ? 'ok' : 'pend') + '">' + desdeTxt(x) + '</span></div>';
-        }).join('') + '<p style="margin-top:10px;font-size:13px">Horas propuestas en <code>data.js</code>, por fijar con el itinerario final.</p></section>';
+        }).join('') : '<div class="fila"><div><b>Sin sortear</b><small>Todavía no hay jugadores en el jurado</small></div><span class="etq pend">Pendiente</span></div>') +
+        '<div class="fila"><div><b>' + esc(adm ? adm.name : 'Admin') + '</b><small>Admin, siempre en el jurado</small></div><span class="etq ok">En el jurado</span></div>' +
+        '<button class="btn oro ancho" style="margin-top:12px" data-acc="sortear">' + (sorteados.length ? 'Sortear de nuevo' : 'Sortear jurado') + '</button></section>' +
+        '<section class="panel"><h3>Cartones</h3><p>Cada jugador tiene un único cartón fijo: la casilla central es el manteo y las otras 8 salen al azar del pool. Se reparten una sola vez.</p>' +
+        '<div class="fila"><div><b>' + repartidos + ' de ' + S.players.length + '</b><small>cartones repartidos</small></div><span class="etq ' + (repartidos ? 'ok' : 'pend') + '">' + (repartidos ? 'Repartidos' : 'Pendiente') + '</span></div>' +
+        (repartidos
+          ? '<button class="btn fantasma ancho" style="margin-top:12px" data-acc="rehacer">Rehacer cartones (borra el progreso)</button>'
+          : '<button class="btn oro ancho" style="margin-top:12px" data-acc="repartir">Repartir cartones</button>') + '</section>';
     }
 
     if (adminTab === 'enlaces') {
-      h += '<section class="panel"><h3>Enlaces personales</h3><p>Cada jugador entra con el suyo. Aquí solo copias el enlace.</p>' +
-        state.players.map(function (p) {
-          return '<div class="fila"><div><b>' + esc(p.name) + '</b><small>' + esc(p.user) + ' · ' + (p.cambiada ? 'contraseña cambiada' : 'provisional: ' + esc(p.pass)) + '</small></div>' +
-            '<button class="btn mini fantasma" data-acc="copiar" data-token="' + esc(p.token) + '">Copiar</button></div>';
+      h += '<section class="panel"><h3>Enlaces personales</h3><p>Cada jugador entra con el suyo. Envíaselo por WhatsApp desde aquí. La contraseña inicial no se guarda en la web: si quieres que vaya en el mensaje, escríbela abajo (solo se usa en este momento).</p>' +
+        '<label class="campo"><span>Contraseña inicial (opcional, para el mensaje)</span><input data-msgpass type="text" autocomplete="off" value="' + esc(msgPass) + '"></label>' +
+        S.players.filter(function (p) { return !p.admin && S.enlaces[p.id]; }).map(function (p) {
+          return '<div class="fila"><div><b>' + esc(p.name) + '</b><small>' + (p.cambio ? 'Aún no ha puesto su contraseña' : 'Ya tiene su contraseña') + '</small></div>' +
+            '<div class="btns"><button class="btn mini" data-acc="wa" data-id="' + esc(p.id) + '">WhatsApp</button>' +
+            '<button class="btn mini fantasma" data-acc="copiar" data-id="' + esc(p.id) + '">Copiar</button>' +
+            '<button class="btn mini fantasma" data-acc="resetear" data-id="' + esc(p.id) + '">Resetear</button></div></div>';
         }).join('') + '</section>';
     }
     return h;
@@ -364,22 +342,82 @@
     var h = location.hash.replace(/^#\/?/, '').split('/');
     return { nombre: h[0] || '', arg: h[1] || '' };
   }
+  function resolverToken(tok) {
+    L = { token: tok, nombre: null, estado: 'primera', error: '', ocupado: false, cargando: true };
+    API.rpcAnonimo('nombre_por_token', { p_token: tok }).then(function (n) {
+      L.nombre = n || null; L.cargando = false; render();
+    }, function (e) {
+      L.error = msgError(e); L.cargando = false; render();
+    });
+  }
   function render(conservarScroll) {
-    var r = ruta(), html;
-    if (r.nombre === 'salir') { state.session = null; guardar(); location.hash = '#/entrar'; return; }
-    if (r.nombre === 'entrar' || !state.session) {
+    var r = ruta(), ses = API.sesion();
+    if (r.nombre === 'salir') { salir(); return; }
+
+    // Enlace personal: siempre muestra el acceso de esa persona, aunque haya otra sesión abierta.
+    if (r.nombre === 'entrar' && r.arg) {
       nieve(true);
-      $app.innerHTML = vEntrar(r.nombre === 'entrar' ? r.arg : '');
+      if (L.token !== r.arg) resolverToken(r.arg);
+      $app.innerHTML = vToken(r.arg);
       return;
     }
+    if (!ses) {
+      if (r.nombre !== 'acceso' && !(r.nombre === 'entrar')) { location.hash = '#/entrar'; return; }
+      nieve(true);
+      $app.innerHTML = r.nombre === 'acceso' ? vAcceso() : vPortada();
+      return;
+    }
+    if (!S.cargado) { nieve(false); $app.innerHTML = vCargando(); return; }
+    if (S.me.cambio) { nieve(true); $app.innerHTML = vClave(); return; }
+    if (['', 'entrar', 'acceso', 'clave'].indexOf(r.nombre) !== -1) { location.hash = '#/carton'; return; }
+
     nieve(false);
     var nombre = r.nombre;
-    if (nombre === '' || (nombre === 'admin' && !soyAdmin())) nombre = 'carton';
+    if (nombre === 'admin' && !soyAdmin()) nombre = 'carton';
     if (nombre === 'jurado' && !soyJurado()) nombre = 'carton';
     var vistas = { carton: vCarton, muro: vMuro, admin: vAdmin, jurado: vJurado };
-    html = cabecera() + (vistas[nombre] || vCarton)() + nav(nombre);
-    $app.innerHTML = html;
+    $app.innerHTML = cabecera() + (vistas[nombre] || vCarton)() + nav(nombre);
     if (!conservarScroll) window.scrollTo(0, 0);
+  }
+
+  /* ---------- sesión ---------- */
+  var poll = 0, subiendo = false;
+  function traducir(e) {
+    var m = e && e.message || '';
+    if (e && e.status === undefined) return msgError(e);
+    if (/different from the old/i.test(m)) return 'Tiene que ser distinta de la contraseña actual.';
+    if (/at least|weak|pwned|easy to guess/i.test(m)) return 'Esa contraseña no es válida: usa 8 o más caracteres y que no sea muy típica.';
+    if (/row-level security/i.test(m)) return 'No puedes hacer eso ahora mismo.';
+    if (/rate limit|too many/i.test(m)) return 'Demasiados intentos. Espera un minuto.';
+    return m || 'Algo ha fallado.';
+  }
+  function arrancar() {
+    L.ocupado = false; L.error = '';
+    return cargarTodo().then(function () {
+      var r = ruta();
+      if (S.me.cambio) location.hash = '#/clave';
+      else if (['', 'entrar', 'acceso', 'clave'].indexOf(r.nombre) !== -1) location.hash = '#/carton';
+      clearInterval(poll); poll = setInterval(refrescar, 12000);
+      render();
+    }).catch(function (e) {
+      toast(traducir(e)); return API.salir().then(function () { render(); });
+    });
+  }
+  function refrescar() {
+    if (document.hidden || !API.sesion() || !S.cargado || $modal.open || subiendo) return;
+    cargarTodo().then(function (cambio) {
+      var a = document.activeElement;
+      if (cambio && !(a && $app.contains(a) && /INPUT|TEXTAREA/.test(a.tagName))) render(true);
+    }).catch(function () { if (!API.sesion()) render(); });
+  }
+  function salir() {
+    clearInterval(poll);
+    return API.salir().then(function () {
+      S = { cargado: false, me: null, players: [], retos: {}, cartones: {}, jurado: [], photos: [], reacciones: {}, ganadores: { linea: null, bingo: null }, enlaces: {}, firma: '' };
+      L = { token: '', nombre: null, estado: '', error: '', ocupado: false };
+      msgPass = '';
+      location.hash = '#/entrar'; render();
+    });
   }
 
   /* ---------- acciones ---------- */
@@ -390,7 +428,7 @@
       '<h3>' + r.icono + ' ' + esc(r.titulo) + '</h3><p class="pista">' + esc(r.pista) + '</p>' +
       (r.desde ? '<p class="pista"><b>El jurado lo valora desde ' + desdeTxt(r) + '.</b> Puedes subir la foto antes.</p>' : '');
     if (f && f.status !== 'ko') {
-      h += '<img class="vista" src="' + f.img + '" alt="Tu foto"><p class="pista"><b>' + (f.status === 'ok' ? 'Validada por el jurado.' : 'Enviada. Esperando al jurado.') + '</b></p>' +
+      h += '<img class="vista" src="' + esc(f.img) + '" alt="Tu foto"><p class="pista"><b>' + (f.status === 'ok' ? 'Validada por el jurado.' : 'Enviada. Esperando al jurado.') + '</b></p>' +
         '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div>';
     } else {
       if (f && f.status === 'ko') h += '<p class="pista"><b>El jurado la ha rechazado.</b> Sube otra.</p>';
@@ -398,85 +436,114 @@
         '<div class="origen"><label class="btn oro">📷 Hacer foto<input class="archivo" type="file" accept="image/*" capture="environment"></label>' +
         '<label class="btn fantasma">🖼️ Fototeca<input class="archivo" type="file" accept="image/*"></label></div>' +
         '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cancelar</button>' +
-        '<button class="btn" id="enviar" data-acc="enviar" data-id="' + id + '" disabled>Enviar foto</button></div>';
+        '<button class="btn" id="enviar" data-acc="enviar" data-id="' + esc(id) + '" disabled>Enviar foto</button></div>';
     }
     $modal.innerHTML = h + '</div>';
     if (!$modal.open) $modal.showModal();
   }
+  // Reduce la foto a 1280 px y JPEG: pesa unos cientos de KB y cabe de sobra en el límite del bucket (2 MB).
   function comprimir(file, cb) {
-    var lector = new FileReader();
-    lector.onload = function () {
-      var img = new Image();
-      img.onload = function () {
-        var max = 640, k = Math.min(1, max / Math.max(img.width, img.height));
-        var c = document.createElement('canvas');
-        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        cb(c.toDataURL('image/jpeg', 0.65));
-      };
-      img.onerror = function () { toast('Esa imagen no se puede leer. Prueba con otra.'); };
-      img.src = lector.result;
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function () {
+      var max = 1280, k = Math.min(1, max / Math.max(img.width, img.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function (b) { if (b) cb(b); else toast('Esa imagen no se puede procesar. Prueba con otra.'); }, 'image/jpeg', 0.75);
     };
-    lector.readAsDataURL(file);
+    img.onerror = function () { URL.revokeObjectURL(url); toast('Esa imagen no se puede leer. Prueba con otra.'); };
+    img.src = url;
+  }
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    var b = new Uint8Array(16); crypto.getRandomValues(b);
+    return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  }
+  function recargar(mensaje) {
+    return cargarTodo().then(function () { render(true); if (mensaje) toast(mensaje); });
+  }
+  function valorar(id, ok) {
+    var f = S.photos.filter(function (x) { return x.id === id; })[0];
+    if (f && !valorable(f)) { toast('Todavía no se puede valorar. Espera a ' + desdeTxt(reto(f.retoId)) + '.'); return; }
+    API.rpc('valorar', { p_foto: id, p_ok: ok })
+      .then(function () { return recargar(ok ? 'Foto validada.' : 'Foto rechazada.'); })
+      .catch(function (e) { toast(traducir(e)); recargar().catch(function () {}); });
+  }
+  function textoWa(p) {
+    var t = 'Hola ' + p.name + '! Este es tu enlace personal para NPGingo, el bingo de la quedada de Navidad (26 dic): ' + enlace(S.enlaces[p.id]);
+    return t + (msgPass ? '\nContraseña inicial: ' + msgPass + '. Al entrar te pedirá cambiarla.' : '\nAl entrar te pedirá la contraseña inicial y que elijas la tuya.');
   }
 
   var acciones = {
-    reto: function (d) { abrirReto(idReto(d.id)); },
+    verAcceso: function () { L.error = ''; location.hash = '#/acceso'; },
+    volver: function () { L.error = ''; location.hash = '#/entrar'; },
+    salirYa: function () { salir(); },
+    reto: function (d) { abrirReto(d.id); },
     cerrar: function () { $modal.close(); },
     enviar: function (d) {
-      var p = yo();
-      if (!imgPendiente) return;
-      var nueva = { id: p.id + '-' + d.id + '-' + Date.now(), playerId: p.id, retoId: idReto(d.id), status: 'pend', ts: ahora(), img: imgPendiente };
-      if (nueva.retoId === 'linea') nueva.fila = Math.max(0, LINEAS.indexOf(lineasCompletas(p.id)[0])); // fila que se canta
-      state.photos.push(nueva);
-      guardar(); $modal.close(); render();
-      toast('Foto enviada. Ahora toca esperar al jurado.');
+      var p = yo(), id = d.id;
+      if (!imgPendiente || subiendo) return;
+      subiendo = true;
+      var btn = document.getElementById('enviar'); btn.disabled = true; btn.textContent = 'Enviando…';
+      var fila = id === 'linea' ? Math.max(0, LINEAS.indexOf(lineasCompletas(p.id)[0])) : null;
+      var viejas = S.photos.filter(function (f) { return f.playerId === p.id && f.retoId === id && f.status === 'ko'; });
+      var ruta = p.id + '/' + uuid() + '.jpg';
+      var paso = viejas.length ? API.del('fotos', 'jugador_id=eq.' + p.id + '&reto=eq.' + encodeURIComponent(id) + '&estado=eq.ko') : Promise.resolve();
+      paso.then(function () { return API.subir(ruta, imgPendiente.blob); })
+        .then(function () { return API.post('fotos', { jugador_id: p.id, reto: id, fila: fila, ruta: ruta }); })
+        .then(function () { viejas.forEach(function (v) { API.borrarObjeto(v.ruta); }); return cargarTodo(); })
+        .then(function () { subiendo = false; $modal.close(); render(true); toast('Foto enviada. Ahora toca esperar al jurado.'); })
+        .catch(function (e) { subiendo = false; toast(traducir(e)); btn.disabled = false; btn.textContent = 'Enviar foto'; });
     },
-    aprobar: function (d) { if (!puedeValorar(d.id)) return; cambiarFoto(d.id, 'ok'); toast('Foto validada.'); },
-    rechazar: function (d) { if (!puedeValorar(d.id)) return; cambiarFoto(d.id, 'ko'); toast('Foto rechazada.'); },
+    aprobar: function (d) { valorar(d.id, true); },
+    rechazar: function (d) { valorar(d.id, false); },
     ver: function (d) {
-      var f = state.photos.filter(function (x) { return x.id === d.fid; })[0];
+      var f = S.photos.filter(function (x) { return x.id === d.fid; })[0];
       if (!f) return;
       $modal.innerHTML = '<div class="modal-in"><h3>' + reto(f.retoId).icono + ' ' + esc(reto(f.retoId).titulo) + '</h3><p class="pista">' + esc(jugador(f.playerId).name) + '</p>' +
-        '<img class="vista" src="' + f.img + '" alt="Foto del reto"><div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div></div>';
+        '<img class="vista" src="' + esc(f.img) + '" alt="Foto del reto"><div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div></div>';
       if (!$modal.open) $modal.showModal();
     },
-    reloj: function (d) { state.offset = 0; guardar(); render(); toast('Reloj en hora real.'); },
     reaccion: function (d) {
-      var p = yo(), rs = state.reacciones[d.id] || (state.reacciones[d.id] = {}), lista = rs[d.e] || (rs[d.e] = []);
-      var i = lista.indexOf(p.id);
-      if (i === -1) lista.push(p.id); else lista.splice(i, 1);
-      guardar(); render(true);
+      var p = yo(), rs = S.reacciones[d.id] || (S.reacciones[d.id] = {}), lista = rs[d.e] || (rs[d.e] = []);
+      var i = lista.indexOf(p.id), quitar = i !== -1;
+      if (quitar) lista.splice(i, 1); else lista.push(p.id);
+      render(true);
+      var op = quitar
+        ? API.del('reacciones', 'foto_id=eq.' + encodeURIComponent(d.id) + '&jugador_id=eq.' + p.id + '&emoji=eq.' + encodeURIComponent(d.e))
+        : API.post('reacciones', { foto_id: d.id, jugador_id: p.id, emoji: d.e });
+      op.catch(function (e) { toast(traducir(e)); return recargar(); }).catch(function () {});
     },
-    sortear: function () { state.jurado = sortear(state.players); guardar(); render(); toast('Jurado nuevo sorteado.'); },
-    demoJurado: function () { state.session = { role: 'jugador', playerId: state.jurado[0] }; guardar(); location.hash = '#/carton'; render(); },
     tab: function (d) { adminTab = d.tab; render(); },
+    sortear: function () {
+      API.rpc('sortear_jurado').then(function () { return recargar('Jurado sorteado.'); }).catch(function (e) { toast(traducir(e)); });
+    },
+    repartir: function () {
+      API.rpc('repartir_cartones', { p_forzar: false }).then(function (n) { return recargar('Cartones repartidos: ' + n + '.'); }).catch(function (e) { toast(traducir(e)); });
+    },
+    rehacer: function () {
+      if (!confirm('Esto borra los cartones actuales y deja a todos sin sellos. ¿Seguro?')) return;
+      API.rpc('repartir_cartones', { p_forzar: true }).then(function (n) { return recargar('Cartones rehechos: ' + n + '.'); }).catch(function (e) { toast(traducir(e)); });
+    },
+    wa: function (d) {
+      var p = jugador(d.id);
+      if (!S.enlaces[p.id]) return;
+      window.open('https://wa.me/?text=' + encodeURIComponent(textoWa(p)), '_blank', 'noopener');
+    },
     copiar: function (d) {
-      var url = location.href.split('#')[0] + '#/entrar/' + d.token;
+      var p = jugador(d.id), url = S.enlaces[p.id] ? enlace(S.enlaces[p.id]) : '';
+      if (!url) return;
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(function () { toast('Enlace copiado.'); }, function () { toast(url); });
+        navigator.clipboard.writeText(url).then(function () { toast('Enlace de ' + p.name + ' copiado.'); }, function () { toast(url); });
       } else { toast(url); }
     },
-    demoJugador: function () { state.session = { role: 'jugador', playerId: 1 }; guardar(); location.hash = '#/carton'; render(); },
-    demoAdmin: function () { state.session = { role: 'jugador', playerId: admin().id }; guardar(); location.hash = '#/carton'; render(); },
-    reiniciar: function () { state = semilla(); guardar(); toast('Datos de ejemplo restaurados.'); render(); },
-    salir: function () { /* lo resuelve el router */ }
+    resetear: function (d) {
+      var p = jugador(d.id);
+      if (!confirm('Esto devuelve la contraseña de ' + p.name + ' a la inicial y le obliga a elegir otra. ¿Seguro?')) return;
+      API.rpc('resetear_pass', { p_jugador: p.id }).then(function () { return recargar('Contraseña de ' + p.name + ' reseteada.'); }).catch(function (e) { toast(traducir(e)); });
+    }
   };
-  function puedeValorar(id) {
-    var f = state.photos.filter(function (x) { return x.id === id; })[0];
-    if (f && !valorable(f)) { toast('Todavía no se puede valorar. Espera a ' + desdeTxt(reto(f.retoId)) + '.'); return false; }
-    return true;
-  }
-  function cambiarFoto(id, estado) {
-    var quien = nombreJurado();
-    state.photos.forEach(function (f) {
-      if (f.id !== id) return;
-      f.status = estado; f.por = quien;
-      // el primer canto validado de cada tipo se lleva el premio
-      if (estado === 'ok' && N.CANTOS[f.retoId] && !state.ganadores[f.retoId]) state.ganadores[f.retoId] = f.playerId;
-    });
-    guardar(); render();
-  }
 
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-acc]');
@@ -486,34 +553,45 @@
   });
   document.addEventListener('change', function (e) {
     if (!e.target.classList.contains('archivo') || !e.target.files[0]) return;
-    comprimir(e.target.files[0], function (data) {
-      imgPendiente = data;
+    comprimir(e.target.files[0], function (blob) {
+      if (imgPendiente) URL.revokeObjectURL(imgPendiente.url);
+      imgPendiente = { blob: blob, url: URL.createObjectURL(blob) };
       var v = document.getElementById('vista');
-      v.src = data; v.hidden = false;
+      v.src = imgPendiente.url; v.hidden = false;
       document.getElementById('enviar').disabled = false;
     });
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target.hasAttribute('data-msgpass')) msgPass = e.target.value;
   });
   document.addEventListener('submit', function (e) {
     var f = e.target.closest('[data-form]');
     if (!f) return;
     e.preventDefault();
     var tipo = f.dataset.form, d = new FormData(f);
-    if (tipo === 'clave') {
-      if (d.get('a') !== d.get('b')) { toast('Las contraseñas no coinciden.'); return; }
-      var p = state.players.filter(function (x) { return x.token === f.dataset.token; })[0];
-      p.cambiada = true;
-      state.session = { role: 'jugador', playerId: p.id };
-      guardar(); location.hash = '#/carton'; render();
-    } else if (tipo === 'reloj') {
-      state.offset = new Date(d.get('t')).getTime() - Date.now();
-      guardar(); render(); toast('Reloj simulado.');
-    } else if (tipo === 'login') {
-      var q = state.players.filter(function (x) { return x.token === f.dataset.token; })[0];
-      state.session = { role: 'jugador', playerId: q.id };
-      guardar(); location.hash = '#/carton'; render();
+    if (L.ocupado) return;
+    if (tipo === 'login' || tipo === 'admin') {
+      var email = tipo === 'login' ? f.dataset.token + DOMINIO : String(d.get('e')).trim();
+      if (tipo === 'admin') L.email = email;
+      L.ocupado = true; L.error = ''; render();
+      API.login(email, String(d.get('a'))).then(arrancar).catch(function (err) {
+        L.ocupado = false;
+        L.error = err.status === 400 ? (tipo === 'login' ? 'Contraseña incorrecta.' : 'Email o contraseña incorrectos.') : traducir(err);
+        render();
+      });
+    } else if (tipo === 'clave') {
+      var a = String(d.get('a')), b = String(d.get('b'));
+      if (a !== b) { L.error = 'Las contraseñas no coinciden.'; render(); return; }
+      if (a.length < 8) { L.error = 'Mínimo 8 caracteres.'; render(); return; }
+      L.ocupado = true; L.error = ''; render();
+      API.cambiarPass(a).then(function () { return API.rpc('pass_cambiada'); })
+        .then(function () { return cargarTodo(); })
+        .then(function () { L.ocupado = false; location.hash = '#/carton'; render(); })
+        .catch(function (err) { L.ocupado = false; L.error = traducir(err); render(); });
     }
   });
-  window.addEventListener('hashchange', function () { render(); });
+  window.addEventListener('hashchange', function () { render(); refrescar(); }); // al cambiar de sección se piden datos frescos
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescar(); });
 
   /* ---------- nevada (solo en la pantalla de entrada) ---------- */
   // Cae nieve y, entre los copos, estrellas de hilo, botellitas verdes y cámaras de fotos.
@@ -631,9 +709,13 @@
     } catch (e) { /* sin medida: se queda la posición por defecto */ }
   }
 
-  state = cargar();
-  if (!location.hash) location.hash = state.session ? '#/carton' : '#/entrar';
+  /* ---------- arranque ---------- */
+  if (!location.hash) location.hash = '#/entrar';
   render();
+  API.restaurar().then(function (ses) {
+    if (ses) return arrancar();
+    render();
+  }).catch(function (e) { toast(traducir(e)); render(); });
   medirN();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(medirN);
   if (document.fonts && document.fonts.load) document.fonts.load('400 100px "Bagel Fat One"').then(medirN, medirN);
