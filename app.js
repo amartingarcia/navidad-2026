@@ -181,7 +181,9 @@
     f.setDate(f.getDate() + (r.desde.dia || 0));
     return f.getTime();
   }
-  function desdeTxt(r) { return 'las ' + r.desde.hora + (r.desde.dia ? ' (madrugada del 27)' : ''); }
+  function desdeTxt(r) {
+    return 'las ' + r.desde.hora + (r.desde.dia ? ' del ' + new Date(desdeTs(r)).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '') : '');
+  }
   function valorable(f) { var t = desdeTs(reto(f.retoId)); return t === null || ahora() >= t; }
   function nombreJurado() { return yo() ? yo().name : ''; }
   function dias() {
@@ -190,12 +192,20 @@
   }
 
   /* ---------- vistas ---------- */
+  // Logo: gorro de Navidad ladeado 45° apoyado en la esquina de la N.
+  function logo() {
+    return '<h1 class="logo" aria-label="NPGingo"><span class="logo-n" aria-hidden="true">N' +
+      '<svg class="gorro" viewBox="0 0 100 100" focusable="false"><path d="M16 80C20 42 38 16 72 13C67 32 71 56 86 80Z" fill="#D4283C"/>' +
+      '<path d="M16 80C20 62 24 50 31 38C40 52 60 60 86 80Z" fill="#A81B2D" opacity=".55"/>' +
+      '<rect x="8" y="72" width="86" height="22" rx="11" fill="#F4F7FB"/><circle cx="73" cy="13" r="10" fill="#F4F7FB"/></svg></span>' +
+      '<span aria-hidden="true">PGingo</span></h1>';
+  }
   function cabecera() {
     var d = dias();
     var cuenta = d > 0
       ? '<strong>' + d + '</strong><span>días para el 26 de diciembre</span>'
       : '<strong>¡Hoy!</strong><span>Empieza la ruta</span>';
-    return '<header class="cab"><div><h1 class="logo">NPGingo</h1><p class="lema">No preguntes, gilipollas</p></div>' +
+    return '<header class="cab"><div>' + logo() + '<p class="lema">No preguntes, gilipollas</p></div>' +
       '<div class="cuenta">' + cuenta + '</div></header>';
   }
   function nav(ruta) {
@@ -208,7 +218,7 @@
   }
 
   function vEntrar(tok) {
-    var h = '<main class="entrada"><h1 class="logo">NPGingo</h1><p class="lema">No preguntes, gilipollas · Bingo de Navidad</p>';
+    var h = '<main class="entrada">' + logo() + '<p class="lema">No preguntes, gilipollas · Bingo de Navidad</p>';
     var p = tok ? state.players.filter(function (x) { return x.token === tok; })[0] : null;
     if (tok && !p) {
       h += '<section class="panel"><h2>Este enlace no vale</h2><p>Puede que esté mal copiado o que el admin lo haya cambiado. Pídele uno nuevo.</p></section>';

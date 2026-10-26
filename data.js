@@ -3,8 +3,8 @@ window.NPG = {
   EVENTO: { fecha: '2026-12-26', nombre: 'Quedada de Navidad NPG', lugar: 'Jaraíz de la Vera' },
 
   // Pool inicial de retos (primera iteración). El fijo es la casilla central de todos los cartones.
-  // `desde` = hora a partir de la cual el jurado puede valorar el reto (dia 0 = 26 dic, dia 1 = madrugada del 27).
-  // Horas propuestas: hay que fijarlas con el itinerario definitivo.
+  // `desde` = momento a partir del cual el jurado puede valorar el reto (dia 0 = 26 dic, dia 1 = 27 dic).
+  // Solo el pibón de la noche espera al día siguiente; el resto se valora en el momento.
   RETOS: [
     { id: 1,  icono: '🥃', titulo: '2 chupitos de Jäger antes de las 18:00', franja: 'Día', tipo: 'individual',
       pista: 'Foto con los 2 chupitos y la hora visible en el móvil.' },
@@ -18,22 +18,19 @@ window.NPG = {
       pista: 'Foto del pico. Solo vale si ella quiere salir en la foto.' },
     { id: 6,  icono: '🔥', titulo: 'Foto al pibón de la noche', franja: 'Noche', tipo: 'jurado',
       pista: 'Que sepa que sale en la foto y se lo tome con humor. Decide el jurado.',
-      desde: { dia: 0, hora: '23:00' } },
+      desde: { dia: 1, hora: '12:00' } },
     { id: 7,  icono: '🐴', titulo: 'Montar a borriquito a Angelines', franja: 'Nuevo Café', tipo: 'individual',
       pista: 'Foto montando a Angelines. Solo si Angelines se apunta.' },
     { id: 8,  icono: '🏆', titulo: 'Mejor atuendo del día', franja: 'Cena', tipo: 'jurado',
-      pista: 'Foto del atuendo completo. Vota el jurado en la cena.',
-      desde: { dia: 0, hora: '21:15' } },
+      pista: 'Foto del atuendo completo. Vota el jurado en la cena.' },
     { id: 9,  icono: '💩', titulo: 'Peor atuendo del día', franja: 'Cena', tipo: 'jurado',
-      pista: 'Foto del atuendo completo. Vota el jurado en la cena.',
-      desde: { dia: 0, hora: '21:15' } },
+      pista: 'Foto del atuendo completo. Vota el jurado en la cena.' },
     { id: 10, icono: '📝', titulo: 'Teléfono en una servilleta a una chica', franja: 'Noche', tipo: 'individual',
       pista: 'Foto de la servilleta entregada, o que otra persona te haga la foto mientras la entregas.' },
     { id: 11, icono: '🎤', titulo: 'Cantar «Mané Mané»', franja: 'Nuevo Café', tipo: 'grupal',
       pista: 'Foto o vídeo corto del grupo cantando. Vale una sola para todos.' },
     { id: 12, icono: '💡', titulo: 'Encender las luces de la discoteca al cerrar', franja: 'Cierre', tipo: 'individual',
-      pista: 'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.',
-      desde: { dia: 1, hora: '04:00' } }
+      pista: 'Foto con las luces ya encendidas, tú en el plano y la hora visible en el móvil.' }
   ],
 
   // Reacciones del muro (cada jugador puede poner o quitar cada una).

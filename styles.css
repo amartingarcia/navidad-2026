@@ -199,3 +199,8 @@ button, a { touch-action: manipulation; }
 .rev-foto img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
 .rev-foto span { display: block; padding: 4px 6px; font-size: 11px; line-height: 1.2; color: var(--nieve); }
 .bloqueo { margin: 0; padding: 0 14px 14px; font-size: 14px; font-weight: 700; color: var(--oro); }
+
+/* Gorro de Navidad sobre la N del logo */
+.logo-n { position: relative; display: inline-block; }
+.gorro { position: absolute; width: .8em; height: .8em; left: .06em; top: -.62em; transform: rotate(-45deg); transform-origin: 50% 90%; pointer-events: none; overflow: visible; }
+.cab { padding-top: 14px; }
