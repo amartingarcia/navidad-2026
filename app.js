@@ -17,7 +17,7 @@
   var S = vacio();
   function vacio() {
     return { cargado: false, me: null, players: [], retos: {}, cartones: {}, jurado: [], photos: [], reacciones: {}, cantos: [], votos: [],
-      premios: { linea: [], bingo: [], premium: {} }, ganadores: { linea: [], bingo: [], premium: {} }, enlaces: {}, firma: '' };
+      premios: { linea: [], bingo: [], premium: {} }, ganadores: { linea: [], bingo: [], premium: {} }, vc: [], enlaces: {}, firma: '' };
   }
 
   /* ---------- utilidades ---------- */
@@ -46,7 +46,7 @@
     var ses = API.sesion();
     return Promise.all([
       API.get('jugadores', 'select=id,nombre,es_admin,cambio_pass&order=nombre'),
-      API.get('retos', 'select=id,icono,titulo,franja,tipo,fijo,pista,desde,hasta,premium'),
+      API.get('retos', 'select=id,icono,titulo,franja,tipo,fijo,pista,desde,hasta,premium,voto_hasta'),
       API.get('cartones', 'select=jugador_id,celdas'),
       API.get('jurado', 'select=jugador_id'),
       API.get('fotos', 'select=id,jugador_id,reto,ruta,estado,creada,valorada_por&order=creada.asc'),
@@ -55,7 +55,8 @@
       API.get('enlaces', 'select=jugador_id,token'),
       API.get('premios', 'select=tipo,reto,puesto,premio&order=puesto.asc'),
       API.get('cantos', 'select=id,jugador_id,tipo,fila,reto,estado,creada&order=creada.asc'),
-      API.get('votos', 'select=canto_id,jurado_id,ok')
+      API.get('votos', 'select=canto_id,jurado_id,ok'),
+      API.get('votos_concurso', 'select=reto,jugador_id,foto_id')
     ]).then(function (r) {
       var jugadores = r[0], fotos = r[4];
       var yoFila = jugadores.filter(function (j) { return j.id === ses.user_id; })[0];
@@ -66,7 +67,7 @@
           me: { id: yoFila.id, name: yoFila.nombre, admin: yoFila.es_admin, cambio: yoFila.cambio_pass },
           players: jugadores.map(function (j) { return { id: j.id, name: j.nombre, admin: j.es_admin, cambio: j.cambio_pass }; }),
           retos: {}, cartones: {}, jurado: r[3].map(function (x) { return x.jugador_id; }), photos: [], reacciones: {},
-          cantos: r[9], votos: r[10], premios: { linea: [], bingo: [], premium: {} },
+          cantos: r[9], votos: r[10], vc: r[11], premios: { linea: [], bingo: [], premium: {} },
           ganadores: { linea: [], bingo: [], premium: {} }, enlaces: {}
         };
         r[8].forEach(function (x) {
@@ -93,7 +94,7 @@
         });
         r[7].forEach(function (x) { nuevo.enlaces[x.jugador_id] = x.token; });
         // Huella de lo que se ve (sin las URLs firmadas, que cambian): evita repintar si nada ha cambiado.
-        nuevo.firma = JSON.stringify([nuevo.me, nuevo.players, nuevo.cartones, nuevo.jurado, nuevo.reacciones, nuevo.ganadores, nuevo.cantos, nuevo.votos, nuevo.premios,
+        nuevo.firma = JSON.stringify([nuevo.me, nuevo.players, nuevo.cartones, nuevo.jurado, nuevo.reacciones, nuevo.ganadores, nuevo.cantos, nuevo.votos, nuevo.vc, nuevo.premios,
           nuevo.photos.map(function (f) { return [f.id, f.status, f.por]; })]);
         var cambio = nuevo.firma !== S.firma;
         S = nuevo;
@@ -143,6 +144,23 @@
   function retosPremium() {
     return Object.keys(S.retos).map(function (k) { return S.retos[k]; }).filter(function (r) { return r.premium; })
       .sort(function (a, b) { return Number(a.id) - Number(b.id); });
+  }
+  // Photo contests (premium + voto_hasta): everyone uploads, one vote each, the most voted photo wins.
+  function esConcurso(r) { return !!(r && r.premium && r.voto_hasta); }
+  function esPrem(r) { return !!(r && r.premium && !r.voto_hasta); }
+  function votacionAbierta(r) { return Date.now() <= Date.parse(r.voto_hasta); }
+  function recuento(rid) {
+    var fs = S.photos.filter(function (f) { return f.retoId === rid && f.status === 'ok'; });
+    return fs.map(function (f) {
+      return { f: f, n: S.vc.filter(function (v) { return v.reto === rid && v.foto_id === f.id; }).length };
+    }).sort(function (a, b) { return b.n - a.n || a.f.ts - b.f.ts; });
+  }
+  function lideres(rid) { var c = recuento(rid); return c.length && c[0].n > 0 ? c.filter(function (x) { return x.n === c[0].n; }) : []; }
+  function quienConcurso(r) {
+    var l = lideres(r.id), cerrada = !votacionAbierta(r);
+    if (!l.length) return cerrada ? 'Sin votos' : 'Libre';
+    var nombres = l.map(function (x) { return jugador(x.f.playerId).name; }).join(' / ');
+    return (cerrada ? (l.length > 1 ? 'Empate: ' : '') : 'En cabeza: ') + nombres + ' (' + l[0].n + ')';
   }
   function cantoPendReto(pid, rid) {
     return S.cantos.filter(function (k) { return k.jugador_id === pid && k.tipo === 'premium' && k.reto === rid && k.estado === 'pend'; })[0] || null;
@@ -319,18 +337,36 @@
     retosPremium().forEach(function (r) {
       (premiosDe('premium', r.id)).forEach(function (pr) {
         var g = ganadoresDe('premium', r.id).filter(function (x) { return x.puesto === pr.puesto; })[0];
-        filas.push(filaPodio(r.icono, esc(r.titulo), pr.premio, g));
+        if (esConcurso(r)) {
+          var q = quienConcurso(r), ganada = !votacionAbierta(r) && lideres(r.id).length;
+          filas.push('<li class="' + (ganada ? 'gana' : '') + '"><span class="med" aria-hidden="true">' + r.icono + '</span><span class="pr"><b>' + esc(r.titulo) + '</b><small>' +
+            (pr.premio ? esc(pr.premio) : 'Premio por determinar') + '</small></span><span class="quien">' + esc(q) + '</span></li>');
+        } else filas.push(filaPodio(r.icono, esc(r.titulo), pr.premio, g));
       });
     });
     return '<section class="podio" aria-label="Premios"><h3>Podio</h3><ul>' + filas.join('') + '</ul></section>';
   }
   function banner() { return '<a class="aviso enlace-premios" href="#/premios">🏆 Premios y podio · retos premium</a>'; }
 
+  // Concurso de fotos (pibón): galería con un voto por jugador.
+  function vConcurso(r) {
+    var p = yo(), abierta = votacionAbierta(r), lista = recuento(r.id), mio = S.vc.filter(function (v) { return v.reto === r.id && v.jugador_id === p.id; })[0];
+    var propia = estadoReto(p.id, r.id), premio = (premiosDe('premium', r.id)[0] || {}).premio;
+    var h = '<h3 class="sec">' + r.icono + ' ' + esc(r.titulo) + '</h3><p class="nota">Fuera del cartón. Cada uno sube su foto' + (r.hasta ? ' (hasta ' + hastaTxt(r) + ')' : '') + ' y cada jugador tiene <b>un voto</b>, para otra foto que no sea la suya (puedes cambiarlo). ' +
+      (abierta ? 'La votación cierra a ' + hastaTxt({ hasta: r.voto_hasta }) + '.' : 'Votación cerrada.') + ' Gana la más votada.' + (premio ? ' Premio: ' + esc(premio) + '.' : '') + '</p>';
+    if (!cerrado(r)) h += '<div class="acc"><button class="btn mini" data-acc="reto" data-id="' + esc(r.id) + '">' + (propia ? 'Repetir mi foto' : 'Subir mi foto') + '</button></div>';
+    if (!lista.length) return h + '<div class="vacio">Todavía no hay fotos.</div>';
+    return h + '<div class="muro">' + lista.map(function (x, i) {
+      var f = x.f, es_mia = f.playerId === p.id, vota = mio && mio.foto_id === f.id;
+      return '<figure class="foto-card"><img src="' + esc(f.img) + '" alt="' + esc(r.titulo) + '" loading="lazy"><figcaption><b>' + (i === 0 && x.n > 0 ? '👑 ' : '') + esc(jugador(f.playerId).name) + '</b> · ' + x.n + (x.n === 1 ? ' voto' : ' votos') + '</figcaption>' +
+        (abierta && !es_mia ? '<button class="btn mini' + (vota ? '' : ' fantasma') + '" data-acc="votarConcurso" data-fid="' + esc(f.id) + '"' + (vota ? ' aria-pressed="true"' : '') + '>' + (vota ? '✅ Tu voto' : 'Votar') + '</button>' : '') + '</figure>';
+    }).join('') + '</div>';
+  }
   // Retos premium: fuera del cartón; gana el primero al que el jurado le valide la prueba.
   function vPremios() {
-    var p = yo(), lista = retosPremium();
-    var h = podio() + '<h3 class="sec">Retos premium</h3><p class="nota">No están en tu cartón: vale cualquiera de ellos y gana quien primero lo consiga. Subes la prueba, el jurado la vota (2 de 3) y el primero aceptado se lleva el premio.</p>';
-    if (!lista.length) return h + '<div class="vacio">Todavía no hay retos premium.</div>';
+    var p = yo(), lista = retosPremium().filter(esPrem), concursos = retosPremium().filter(esConcurso);
+    var h = podio() + concursos.map(vConcurso).join('') + (lista.length ? '<h3 class="sec">Retos premium</h3><p class="nota">No están en tu cartón: vale cualquiera de ellos y gana quien primero lo consiga. Subes la prueba, el jurado la vota (2 de 3) y el primero aceptado se lleva el premio.</p>' : '');
+    if (!lista.length) return concursos.length ? h : h + '<div class="vacio">Todavía no hay retos premium.</div>';
     return h + lista.map(function (r) {
       var gan = ganadoresDe('premium', r.id)[0], premio = (premiosDe('premium', r.id)[0] || {}).premio;
       var f = estadoReto(p.id, r.id), pend = cantoPendReto(p.id, r.id), accion;
@@ -533,7 +569,7 @@
       var r = ruta();
       if (S.me.cambio) location.hash = '#/clave';
       else if (['', 'entrar', 'acceso', 'clave'].indexOf(r.nombre) !== -1) location.hash = '#/carton';
-      clearInterval(poll); poll = setInterval(refrescar, 12000);
+      clearInterval(poll); poll = setInterval(refrescar, 15000);
       render();
     }).catch(function (e) {
       toast(traducir(e)); return API.salir().then(function () { render(); });
@@ -564,14 +600,14 @@
       '<h3>' + r.icono + ' ' + esc(r.titulo) + '</h3><p class="pista">' + esc(r.pista) + '</p>' +
       (r.hasta ? '<p class="pista"><b>' + (cerrado(r) ? 'Plazo terminado (era hasta ' : 'Plazo: hasta ') + hastaTxt(r) + (cerrado(r) ? ').' : '.') + '</b></p>' : '') +
       (r.desde ? '<p class="pista"><b>El jurado lo valora desde ' + desdeTxt(r) + '.</b> Puedes subir la foto antes.</p>' : '');
-    if (r.premium && cantoPendReto(p.id, id)) {
+    if (esPrem(r) && cantoPendReto(p.id, id)) {
       h += (f ? '<img class="vista" src="' + esc(f.img) + '" alt="Tu prueba">' : '') + '<p class="pista"><b>Prueba enviada. El jurado la está mirando.</b></p>' +
         '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div>';
       $modal.innerHTML = h + '</div>';
       if (!$modal.open) $modal.showModal();
       return;
     }
-    if (r.premium) {
+    if (esPrem(r)) {
       h += '<p class="pista"><b>Reto premium:</b> gana quien primero consiga que el jurado lo valide. Al enviar la foto se la pasamos al jurado.</p>';
       if (f) h += '<img class="vista" src="' + esc(f.img) + '" alt="Tu prueba">';
     } else if (f && f.status !== 'ko') {
@@ -587,7 +623,7 @@
     h += '<img class="vista" id="vista" alt="" hidden>' +
       '<div class="origen"><label class="btn oro">' + (f ? '📷 Repetir foto' : '📷 Subir foto') + '<input class="archivo" type="file" accept="image/*"></label></div>' +
       '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cancelar</button>' +
-      '<button class="btn" id="enviar" data-acc="enviar" data-id="' + esc(id) + '" disabled>' + (r.premium ? 'Enviar al jurado' : 'Enviar foto') + '</button></div>';
+      '<button class="btn" id="enviar" data-acc="enviar" data-id="' + esc(id) + '" disabled>' + (esPrem(r) ? 'Enviar al jurado' : 'Enviar foto') + '</button></div>';
     $modal.innerHTML = h + '</div>';
     if (!$modal.open) $modal.showModal();
   }
@@ -641,9 +677,9 @@
       var paso = viejas.length ? API.del('fotos', 'jugador_id=eq.' + p.id + '&reto=eq.' + encodeURIComponent(id)) : Promise.resolve();
       paso.then(function () { return API.subir(ruta, imgPendiente.blob); })
         .then(function () { return API.post('fotos', { jugador_id: p.id, reto: id, ruta: ruta }); })
-        .then(function () { viejas.forEach(function (v) { API.borrarObjeto(v.ruta); }); return reto(id).premium ? API.rpc('cantar', { p_tipo: 'premium', p_reto: id }) : null; })
+        .then(function () { viejas.forEach(function (v) { API.borrarObjeto(v.ruta); }); return esPrem(reto(id)) ? API.rpc('cantar', { p_tipo: 'premium', p_reto: id }) : null; })
         .then(function () { return cargarTodo(); })
-        .then(function () { subiendo = false; $modal.close(); render(true); toast(reto(id).premium ? 'Prueba enviada. El jurado la votará.' : reto(id).desde ? 'Foto enviada. La valorará el jurado.' : 'Foto subida.'); })
+        .then(function () { subiendo = false; $modal.close(); render(true); toast(esPrem(reto(id)) ? 'Prueba enviada. El jurado la votará.' : reto(id).desde ? 'Foto enviada. La valorará el jurado.' : 'Foto subida.'); })
         .catch(function (e) { subiendo = false; toast(traducir(e)); btn.disabled = false; btn.textContent = 'Enviar foto'; });
     },
     cantar: function (d) {
@@ -666,6 +702,10 @@
       $modal.innerHTML = '<div class="modal-in"><h3>' + reto(f.retoId).icono + ' ' + esc(reto(f.retoId).titulo) + '</h3><p class="pista">' + esc(jugador(f.playerId).name) + '</p>' +
         '<img class="vista" src="' + esc(f.img) + '" alt="Foto del reto"><div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div></div>';
       if (!$modal.open) $modal.showModal();
+    },
+    votarConcurso: function (d) {
+      API.rpc('votar_concurso', { p_foto: d.fid }).then(function () { return refrescar(); })
+        .catch(function (e) { toast(e.message || 'No se pudo votar'); });
     },
     borrarFoto: function (d) {
       var f = S.photos.filter(function (x) { return x.id === d.id; })[0];

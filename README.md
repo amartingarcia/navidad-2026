@@ -19,7 +19,8 @@ Frontend estático (HTML, CSS y JS sin build) sobre Supabase (Auth, Postgres con
 - **Cantos:** «¡Cantar línea!» y «¡Cantar bingo!» no llevan foto. El jurado (2 jugadores al azar + el admin) revisa las fotos del jugador y vota; se necesitan **2 de 3** a favor. Nadie vota su propio canto. Hay **1 premio de línea y 1 de bingo** (premios por determinar, columna `premios.premio`). Solo el jurado valora la foto del pibón de la noche.
 - **Retos premium** (por definir): están fuera del cartón, cualquiera puede intentarlos y gana quien primero consiga que el jurado (2 de 3) valide su prueba. Cada uno tiene su premio. Se definen en `supabase/retos.sql`.
 - La pestaña **Premios** muestra el podio (línea, bingo y cada reto premium) con el nombre de quien se lo lleva; el admin define el texto de cada premio en Admin → Premios.
-- Cada reto puede tener una hora mínima de valoración (`retos.desde`; el pibón de la noche, el 27 dic 12:00). La comprueba el servidor.
+- **Pibón de la jornada** (reto premium tipo concurso de fotos, `retos.voto_hasta`): cada uno sube su foto, cada jugador tiene **un voto** (no a su propia foto, cambiable) y gana la más votada cuando cierra la votación (27 dic 12:00). Se ve en directo en Premios; un empate se muestra como tal.
+- Cada reto puede tener una hora mínima de valoración (`retos.desde`; el pibón de la noche, el 27 dic 12:00). La comprueba el servidor. Se refresca cada 15 s.
 - Muro común con todas las fotos y reacciones ❤️ 😂 🍆 🔥 👍 🖕 🚀.
 
 ## Seguridad

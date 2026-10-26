@@ -153,6 +153,16 @@ create table if not exists public.ganadores (
   constraint ganadores_unico unique (tipo, reto, puesto)
 );
 
+-- Photo contest (e.g. the day's "pibón"): a premium challenge with voto_hasta set. Everyone uploads a photo and
+-- every player has ONE vote among the contest photos (not their own); the most voted one wins when voting closes.
+alter table public.retos add column if not exists voto_hasta timestamptz;
+create table if not exists public.votos_concurso (
+  reto       text not null references public.retos(id) on delete cascade,
+  jugador_id uuid not null references public.jugadores(id) on delete cascade,
+  foto_id    uuid not null references public.fotos(id) on delete cascade,
+  primary key (reto, jugador_id)
+);
+
 -- Migration v2 -> v3 (idempotent): premium challenges + prizes per challenge.
 alter table public.retos add column if not exists premium boolean not null default false;  -- outside the cards, first to win takes the prize
 do $$
@@ -279,7 +289,7 @@ begin
   if auth.uid() is null then raise exception 'Sin sesión'; end if;
   if p_tipo not in ('linea','bingo','premium') then raise exception 'Tipo no válido'; end if;
   if (p_tipo = 'premium') <> (p_reto is not null) then raise exception 'Tipo no válido'; end if;
-  if p_tipo = 'premium' and not exists (select 1 from retos r where r.id = p_reto and r.premium) then
+  if p_tipo = 'premium' and not exists (select 1 from retos r where r.id = p_reto and r.premium and r.voto_hasta is null) then
     raise exception 'Ese reto no es premium';
   end if;
   select count(*) into v_cupo from premios pr where pr.tipo = p_tipo and pr.reto = v_reto;
@@ -357,6 +367,22 @@ begin
     v_estado := 'ko';
   end if;
   return v_estado;
+end $$;
+
+-- Vote (or change the vote) in a photo contest. One vote per player and contest; never for your own photo.
+create or replace function public.votar_concurso(p_foto uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare f fotos%rowtype; r retos%rowtype;
+begin
+  if auth.uid() is null then raise exception 'Sin sesión'; end if;
+  select * into f from fotos where id = p_foto;
+  if not found or f.estado <> 'ok' then raise exception 'Esa foto no existe'; end if;
+  select * into r from retos where id = f.reto;
+  if r.voto_hasta is null then raise exception 'Ese reto no se vota'; end if;
+  if now() > r.voto_hasta then raise exception 'La votación ha terminado'; end if;
+  if f.jugador_id = auth.uid() then raise exception 'No puedes votar tu propia foto'; end if;
+  insert into votos_concurso (reto, jugador_id, foto_id) values (r.id, auth.uid(), p_foto)
+    on conflict (reto, jugador_id) do update set foto_id = excluded.foto_id;
 end $$;
 
 -- ───────────────────────── Admin RPCs ─────────────────────────
@@ -441,12 +467,13 @@ alter table public.ganadores  enable row level security;
 alter table public.premios    enable row level security;
 alter table public.cantos     enable row level security;
 alter table public.votos      enable row level security;
+alter table public.votos_concurso enable row level security;
 alter table public.ajustes    enable row level security;   -- no policies: clients cannot read it
 
 -- Clients never write directly except photos / reactions (policies below); everything else goes via RPC.
 revoke all on all tables in schema public from anon, authenticated;
 grant select on public.jugadores, public.retos, public.cartones, public.jurado, public.fotos,
-                public.reacciones, public.ganadores, public.enlaces, public.premios, public.cantos, public.votos to authenticated;
+                public.reacciones, public.ganadores, public.enlaces, public.premios, public.cantos, public.votos, public.votos_concurso to authenticated;
 grant insert, delete on public.fotos to authenticated;
 grant insert, delete on public.reacciones to authenticated;
 
@@ -459,10 +486,10 @@ grant usage, select on all sequences in schema public to service_role;
 revoke all on function public.nombre_por_token(text) from public;
 grant execute on function public.nombre_por_token(text) to anon, authenticated;
 revoke all on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
-                       public.repartir_cartones(boolean), public.cantar(text, text), public.votar_canto(uuid, boolean),
+                       public.repartir_cartones(boolean), public.cantar(text, text), public.votar_canto(uuid, boolean), public.votar_concurso(uuid),
                        public.es_admin(), public.es_jurado(), public.resetear_pass(uuid), public.definir_premio(text, int, text, text) from public;
 grant execute on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
-                          public.repartir_cartones(boolean), public.cantar(text, text), public.votar_canto(uuid, boolean),
+                          public.repartir_cartones(boolean), public.cantar(text, text), public.votar_canto(uuid, boolean), public.votar_concurso(uuid),
                           public.es_admin(), public.es_jurado(), public.resetear_pass(uuid), public.definir_premio(text, int, text, text) to authenticated;
 grant execute on all functions in schema public to service_role;
 
@@ -509,6 +536,9 @@ create policy fotos_subir on public.fotos for insert to authenticated
     and (exists (select 1 from cartones c where c.jugador_id = auth.uid() and reto = any (c.celdas))
          or exists (select 1 from retos r where r.id = reto and r.premium))
   );
+
+drop policy if exists vconc_leer on public.votos_concurso;
+create policy vconc_leer on public.votos_concurso for select to authenticated using (true);
 
 drop policy if exists fotos_borrar on public.fotos;
 create policy fotos_borrar on public.fotos for delete to authenticated

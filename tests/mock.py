@@ -19,6 +19,7 @@ RETOS = {
  '31':('💸','Bizum de Goria de 500 €','individual',False,None),
 }
 PREMIUM = {'31'}
+CONCURSO = {}   # reto id -> ISO voting deadline (photo contests, tests set it)
 HASTA = {}   # reto id -> ISO deadline (tests set it)
 JPEG = None
 def jpeg():
@@ -97,7 +98,7 @@ class Mock:
         if method=='GET':
             data = {
               'jugadores': list(self.jug.values()),
-              'retos': [{'id':k,'icono':v[0],'titulo':v[1],'franja':'x','tipo':v[2],'fijo':v[3],'pista':'pista '+k,'desde':v[4],'hasta':HASTA.get(k),'premium':k in PREMIUM} for k,v in RETOS.items()],
+              'retos': [{'id':k,'icono':v[0],'titulo':v[1],'franja':'x','tipo':v[2],'fijo':v[3],'pista':'pista '+k,'desde':v[4],'hasta':HASTA.get(k),'premium':k in PREMIUM,'voto_hasta':CONCURSO.get(k)} for k,v in RETOS.items()],
               'cartones': [{'jugador_id':k,'celdas':v} for k,v in self.cartones.items()],
               'jurado': [{'jugador_id':k} for k in self.jurado],
               'fotos': [f for f in self.fotos if self.visible_foto(f,uid)],
@@ -106,6 +107,7 @@ class Mock:
               'premios': self.premios,
               'cantos': [k for k in self.cantos if k['jugador_id']==uid or k['estado']=='ok' or self.jury(uid)],
               'votos': self.votos if self.jury(uid) else [],
+              'votos_concurso': getattr(self,'vc',[]),
               'enlaces': [{'jugador_id':k,'token':v} for k,v in self.enl.items()] if self.admin(uid) else [],
             }[t]
             return 200,data
@@ -175,7 +177,7 @@ class Mock:
         if n=='cantar':
             t=a['p_tipo']; r=a.get('p_reto'); rr=r or ''
             assert (t=='premium')==(r is not None),'Tipo no válido'
-            if t=='premium': assert r in PREMIUM,'Ese reto no es premium'
+            if t=='premium': assert r in PREMIUM and r not in CONCURSO,'Ese reto no es premium'
             cupo=len([p for p in self.premios if p['tipo']==t and p['reto']==rr])
             gan=[g for g in self.gan[t] if g.get('reto','')==rr]
             assert len(gan)<cupo,'Ya se han llevado todos los premios de este tipo'
@@ -191,6 +193,16 @@ class Mock:
                 else: assert bingo,'Te faltan sellos para el bingo'
             k={'id':str(uuid.uuid4()),'jugador_id':uid,'tipo':t,'fila':fila,'reto':r,'estado':'pend','creada':time.strftime('%Y-%m-%dT%H:%M:%S+00:00',time.gmtime())}
             self.cantos.append(k); return 200,k['id']
+        if n=='votar_concurso':
+            if not hasattr(self,'vc'): self.vc=[]
+            f=[x for x in self.fotos if x['id']==a['p_foto'] and x['estado']=='ok']
+            assert f,'Esa foto no existe'
+            f=f[0]; lim=CONCURSO.get(f['reto'])
+            assert lim,'Ese reto no se vota'
+            assert time.time()<=time.mktime(time.strptime(lim[:19],'%Y-%m-%dT%H:%M:%S')),'La votación ha terminado'
+            assert f['jugador_id']!=uid,'No puedes votar tu propia foto'
+            self.vc=[v for v in self.vc if not (v['reto']==f['reto'] and v['jugador_id']==uid)]+[{'reto':f['reto'],'jugador_id':uid,'foto_id':f['id']}]
+            return 204,None
         if n=='votar_canto':
             assert self.jury(uid),'No eres del jurado'
             k=[x for x in self.cantos if x['id']==a['p_canto']][0]
