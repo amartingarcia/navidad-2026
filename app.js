@@ -67,7 +67,7 @@
         user: n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       };
     });
-    var s = { session: null, players: jugadores, photos: [], reacciones: {}, ganadores: { linea: null, bingo: null }, jurado: sortear(jugadores) };
+    var s = { session: null, players: jugadores, photos: [], reacciones: {}, offset: 0, ganadores: { linea: null, bingo: null }, jurado: sortear(jugadores) };
     var colores = ['#1E6B4A', '#D4283C', '#18304F', '#8a5a00', '#5b2a86'];
     function foto(pid, rid, estado, min) {
       s.photos.push({ id: pid + '-' + rid + '-' + min, playerId: pid, retoId: rid, status: estado,
@@ -94,6 +94,7 @@
       if (raw) {
         var s = JSON.parse(raw);
         if (!s.reacciones) s.reacciones = {};
+        if (typeof s.offset !== 'number') s.offset = 0;
         s.players.forEach(function (p) { p.admin = p.name === N.ADMIN; });
         var adm = s.players.filter(function (p) { return p.admin; })[0];
         if (s.session && s.session.role === 'admin') s.session = adm ? { role: 'jugador', playerId: adm.id } : null;
@@ -152,22 +153,36 @@
       .sort(function (a, b) { return a.ts - b.ts; });
   }
   function listaPendientes(excluirPid) {
-    var pend = pendientes(excluirPid);
+    var pend = pendientes(excluirPid).sort(function (a, b) { return (valorable(b) ? 1 : 0) - (valorable(a) ? 1 : 0); });
     if (!pend.length) return '<div class="vacio">No hay fotos por validar. Descansa un rato.</div>';
     return '<div class="muro">' + pend.map(function (f) {
-      var r = reto(f.retoId), pid = f.playerId, mini = '';
+      var r = reto(f.retoId), pid = f.playerId, rev = '', libre = valorable(f);
       if (r.tipo === 'canto') {
-        mini = '<div class="miniaturas">' + carton(pid).map(function (rid) {
-          var g = estadoReto(pid, rid);
-          return g ? '<img src="' + g.img + '" alt="' + esc(reto(rid).titulo) + '">' : '';
-        }).join('') + '</div>';
+        var c = carton(pid), ids = r.id === 'linea' ? LINEAS[f.fila || 0].map(function (i) { return c[i]; }) : c;
+        rev = '<p class="rev-tit">Revisa ' + (r.id === 'linea' ? 'las 3 fotos de la fila' : 'las 9 fotos del cartón') + '. Toca una para verla grande.</p><div class="rev">' +
+          ids.map(function (rid) {
+            var g = estadoReto(pid, rid);
+            return g ? '<button class="rev-foto" data-acc="ver" data-fid="' + esc(g.id) + '"><img src="' + g.img + '" alt=""><span>' + esc(reto(rid).titulo) + '</span></button>' : '';
+          }).join('') + '</div>';
       }
       return '<figure class="foto-card"><img src="' + f.img + '" alt="' + esc(r.titulo) + '">' +
-        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small>' + mini + '</figcaption>' +
-        '<div class="acc"><button class="btn mini" data-acc="aprobar" data-id="' + esc(f.id) + '">Validar</button>' +
-        '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div></figure>';
+        '<figcaption><b>' + esc(jugador(f.playerId).name) + '</b> · ' + esc(r.titulo) + '<br><small>' + esc(r.pista) + '</small>' + rev + '</figcaption>' +
+        (libre
+          ? '<div class="acc"><button class="btn mini" data-acc="aprobar" data-id="' + esc(f.id) + '">Validar</button>' +
+            '<button class="btn mini fantasma" data-acc="rechazar" data-id="' + esc(f.id) + '">Rechazar</button></div>'
+          : '<p class="bloqueo">🔒 Se puede valorar desde ' + desdeTxt(r) + '</p>') + '</figure>';
     }).join('') + '</div>';
   }
+  // Reloj: en la PoC el admin puede simular la hora de la quedada para probar las horas mínimas.
+  function ahora() { return Date.now() + ((state && state.offset) || 0); }
+  function desdeTs(r) {
+    if (!r || !r.desde) return null;
+    var f = new Date(N.EVENTO.fecha + 'T' + r.desde.hora + ':00');
+    f.setDate(f.getDate() + (r.desde.dia || 0));
+    return f.getTime();
+  }
+  function desdeTxt(r) { return 'las ' + r.desde.hora + (r.desde.dia ? ' (madrugada del 27)' : ''); }
+  function valorable(f) { var t = desdeTs(reto(f.retoId)); return t === null || ahora() >= t; }
   function nombreJurado() { return yo() ? yo().name : ''; }
   function dias() {
     var d = Math.ceil((new Date(N.EVENTO.fecha + 'T00:00:00') - new Date()) / 86400000);
@@ -232,9 +247,9 @@
     var p = yo(), c = carton(p.id), n = sellos(p.id), lineas = lineasCompletas(p.id);
     var h = '';
     if (esJurado(p.id)) {
-      var np = pendientes(p.id).length;
+      var np = pendientes(p.id).filter(valorable).length;
       h += '<a class="banner-jurado" href="#/jurado"><span class="ico" aria-hidden="true">⚖️</span><span><b>' + (p.admin ? 'Eres del jurado, como admin' : 'Te ha tocado jurado') + '</b><br>' +
-        (np ? np + (np === 1 ? ' foto espera' : ' fotos esperan') + ' tu veredicto' : 'No hay fotos por validar ahora mismo') + '</span></a>';
+        (np ? np + (np === 1 ? ' foto espera' : ' fotos esperan') + ' tu veredicto' : 'No hay fotos que valorar ahora mismo') + '</span></a>';
     }
     h += banner();
     h += '<article class="ticket"><div class="ticket-top"><div><h2>Cartón de ' + esc(p.name) + '</h2><small>Quedada de Navidad · 26 dic 2026</small></div>' +
@@ -300,7 +315,7 @@
   }
 
   function vAdmin() {
-    var tabs = [['sorteo', 'Sorteo'], ['enlaces', 'Enlaces']];
+    var tabs = [['sorteo', 'Sorteo'], ['reloj', 'Reloj de prueba'], ['enlaces', 'Enlaces']];
     var h = '<div class="segmento" role="group" aria-label="Secciones del admin">' + tabs.map(function (t) {
       return '<button data-acc="tab" data-tab="' + t[0] + '" aria-pressed="' + (adminTab === t[0]) + '">' + t[1] + '</button>';
     }).join('') + '</div>';
@@ -311,6 +326,17 @@
           return '<div class="fila"><div><b>' + esc(jugador(id).name) + '</b><small>Jugador sorteado</small></div><span class="etq ok">En el jurado</span></div>';
         }).join('') + '<div class="fila"><div><b>' + esc(admin().name) + '</b><small>Admin, siempre en el jurado</small></div><span class="etq ok">En el jurado</span></div>' +
         '<button class="btn oro ancho" style="margin-top:12px" data-acc="sortear">Sortear de nuevo</button></section>';
+    }
+
+    if (adminTab === 'reloj') {
+      var t = new Date(ahora()), pad = function (n) { return String(n).padStart(2, '0'); };
+      var valor = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()) + 'T' + pad(t.getHours()) + ':' + pad(t.getMinutes());
+      h += '<form class="panel" data-form="reloj"><h3>Reloj de prueba</h3><p>Solo para probar en la PoC: simula la hora de la quedada para ver cuándo se desbloquean los retos con hora mínima. Se quita en la versión real.</p>' +
+        '<label class="campo"><span>Fecha y hora simuladas</span><input name="t" type="datetime-local" value="' + valor + '" required></label>' +
+        '<div class="acciones"><button class="btn oro" type="submit">Simular esta hora</button><button class="btn fantasma" type="button" data-acc="reloj">Volver a la hora real</button></div></form>' +
+        '<section class="panel"><h3>Horas mínimas de valoración</h3>' + RETOS.filter(function (x) { return x.desde; }).map(function (x) {
+          return '<div class="fila"><div><b>' + x.icono + ' ' + esc(x.titulo) + '</b></div><span class="etq ' + (ahora() >= desdeTs(x) ? 'ok' : 'pend') + '">' + desdeTxt(x) + '</span></div>';
+        }).join('') + '<p style="margin-top:10px;font-size:13px">Horas propuestas en <code>data.js</code>, por fijar con el itinerario final.</p></section>';
     }
 
     if (adminTab === 'enlaces') {
@@ -351,7 +377,8 @@
     var p = yo(), r = reto(id), f = estadoReto(p.id, id);
     imgPendiente = null;
     var h = '<div class="modal-in"><span class="etq">' + esc(r.franja) + ' · ' + (r.tipo === 'jurado' ? 'lo decide el jurado' : r.tipo) + '</span>' +
-      '<h3>' + r.icono + ' ' + esc(r.titulo) + '</h3><p class="pista">' + esc(r.pista) + '</p>';
+      '<h3>' + r.icono + ' ' + esc(r.titulo) + '</h3><p class="pista">' + esc(r.pista) + '</p>' +
+      (r.desde ? '<p class="pista"><b>El jurado lo valora desde ' + desdeTxt(r) + '.</b> Puedes subir la foto antes.</p>' : '');
     if (f && f.status !== 'ko') {
       h += '<img class="vista" src="' + f.img + '" alt="Tu foto"><p class="pista"><b>' + (f.status === 'ok' ? 'Validada por el jurado.' : 'Enviada. Esperando al jurado.') + '</b></p>' +
         '<div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div>';
@@ -389,12 +416,22 @@
     enviar: function (d) {
       var p = yo();
       if (!imgPendiente) return;
-      state.photos.push({ id: p.id + '-' + d.id + '-' + Date.now(), playerId: p.id, retoId: idReto(d.id), status: 'pend', ts: Date.now(), img: imgPendiente });
+      var nueva = { id: p.id + '-' + d.id + '-' + Date.now(), playerId: p.id, retoId: idReto(d.id), status: 'pend', ts: ahora(), img: imgPendiente };
+      if (nueva.retoId === 'linea') nueva.fila = Math.max(0, LINEAS.indexOf(lineasCompletas(p.id)[0])); // fila que se canta
+      state.photos.push(nueva);
       guardar(); $modal.close(); render();
       toast('Foto enviada. Ahora toca esperar al jurado.');
     },
-    aprobar: function (d) { cambiarFoto(d.id, 'ok'); toast('Foto validada.'); },
-    rechazar: function (d) { cambiarFoto(d.id, 'ko'); toast('Foto rechazada.'); },
+    aprobar: function (d) { if (!puedeValorar(d.id)) return; cambiarFoto(d.id, 'ok'); toast('Foto validada.'); },
+    rechazar: function (d) { if (!puedeValorar(d.id)) return; cambiarFoto(d.id, 'ko'); toast('Foto rechazada.'); },
+    ver: function (d) {
+      var f = state.photos.filter(function (x) { return x.id === d.fid; })[0];
+      if (!f) return;
+      $modal.innerHTML = '<div class="modal-in"><h3>' + reto(f.retoId).icono + ' ' + esc(reto(f.retoId).titulo) + '</h3><p class="pista">' + esc(jugador(f.playerId).name) + '</p>' +
+        '<img class="vista" src="' + f.img + '" alt="Foto del reto"><div class="fila-btn"><button class="btn fantasma" data-acc="cerrar">Cerrar</button></div></div>';
+      if (!$modal.open) $modal.showModal();
+    },
+    reloj: function (d) { state.offset = 0; guardar(); render(); toast('Reloj en hora real.'); },
     reaccion: function (d) {
       var p = yo(), rs = state.reacciones[d.id] || (state.reacciones[d.id] = {}), lista = rs[d.e] || (rs[d.e] = []);
       var i = lista.indexOf(p.id);
@@ -415,6 +452,11 @@
     reiniciar: function () { state = semilla(); guardar(); toast('Datos de ejemplo restaurados.'); render(); },
     salir: function () { /* lo resuelve el router */ }
   };
+  function puedeValorar(id) {
+    var f = state.photos.filter(function (x) { return x.id === id; })[0];
+    if (f && !valorable(f)) { toast('Todavía no se puede valorar. Espera a ' + desdeTxt(reto(f.retoId)) + '.'); return false; }
+    return true;
+  }
   function cambiarFoto(id, estado) {
     var quien = nombreJurado();
     state.photos.forEach(function (f) {
@@ -452,6 +494,9 @@
       p.cambiada = true;
       state.session = { role: 'jugador', playerId: p.id };
       guardar(); location.hash = '#/carton'; render();
+    } else if (tipo === 'reloj') {
+      state.offset = new Date(d.get('t')).getTime() - Date.now();
+      guardar(); render(); toast('Reloj simulado.');
     } else if (tipo === 'login') {
       var q = state.players.filter(function (x) { return x.token === f.dataset.token; })[0];
       state.session = { role: 'jugador', playerId: q.id };

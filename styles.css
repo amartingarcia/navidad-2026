@@ -191,3 +191,11 @@ button, a { touch-action: manipulation; }
 
 /* La vista previa solo aparece cuando hay foto elegida */
 .vista[hidden] { display: none; }
+
+/* Revisión de un canto: las 3 fotos de la fila o las 9 del cartón */
+.rev-tit { margin: 10px 0 6px; font-size: 13px; color: var(--suave); }
+.rev { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.rev-foto { padding: 0; border: 2px solid var(--linea); border-radius: 10px; background: var(--noche); overflow: hidden; text-align: left; }
+.rev-foto img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.rev-foto span { display: block; padding: 4px 6px; font-size: 11px; line-height: 1.2; color: var(--nieve); }
+.bloqueo { margin: 0; padding: 0 14px 14px; font-size: 14px; font-weight: 700; color: var(--oro); }

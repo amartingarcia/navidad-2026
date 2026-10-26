@@ -18,10 +18,11 @@ También funciona abriendo `index.html` directamente.
 - Pantalla de entrada con enlace personal (`#/entrar/<token>`): usuario, contraseña provisional y cambio obligatorio.
 - Cartón 3x3 con la casilla central fija (manteo a Maritsu) y 8 retos por jugador, repartidos de forma determinista.
 - Subida de foto por reto (cámara del móvil), con compresión en el cliente.
-- La línea es una fila horizontal (no valen columnas ni diagonales) y se marca con una barra dorada en el cartón. Línea y bingo se cantan con foto, como cualquier otro reto: al completar una línea o los 9 sellos aparece el botón, subes la foto y el jurado la valida (ve las fotos del cartón para comprobarla). El primero en ser validado gana.
+- La línea es una fila horizontal (no valen columnas ni diagonales) y se marca con una barra dorada en el cartón. Línea y bingo se cantan con foto, como cualquier otro reto: al completar una línea o los 9 sellos aparece el botón, subes la foto y el jurado la valida (al valorar una línea ve las 3 fotos de esa fila y al valorar un bingo las 9 del cartón, con zoom al tocarlas). El primero en ser validado gana.
 - Admin: es un jugador más (tiene cartón) con funciones especiales: sorteo del jurado y enlaces personales.
 - Jurado: 2 jugadores al azar más el admin (3 en total). Los elegidos ven un banner en su cartón y una pestaña «Jurado» para validar las fotos de los demás (nunca las suyas).
 - Instalable en el móvil (manifest + iconos): «Añadir a pantalla de inicio» en Safari o Chrome.
+- Horas mínimas: algunos retos (atuendos, pibón de la noche, luces de la discoteca) no se pueden valorar hasta una hora fijada en `data.js` (`desde`); el jugador puede subir la foto antes. En *Admin → Reloj de prueba* se simula la hora de la quedada para probarlo.
 - Muro común con las fotos validadas de todos y reacciones (😂 🔥 💀 👏 🍻) que cualquier jugador puede poner o quitar. Más panel de admin (sorteo del jurado y enlaces).
 
 ## Lo que no hace todavía
