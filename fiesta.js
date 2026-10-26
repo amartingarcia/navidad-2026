@@ -59,7 +59,8 @@
     '<path d="M26 27 q3 -3 6 0 M40 27 q3 -3 6 0" stroke="#13233B" stroke-width="1.7" fill="none" stroke-linecap="round"/>' +
     '<path d="M21 24 Q22 5 44 5 Q56 7 58 20 Q40 13 21 24 Z" fill="#D4283C"/>' +
     '<rect x="19" y="19.5" width="36" height="8" rx="4" fill="#F4F7FB"/><circle cx="58" cy="20" r="5.4" fill="#F4F7FB"/></svg>';
-  var FRASES_MAMA = ['¿Me invitas a un Jäger?', '¡Sujétame el cubata, guapo!', '¡Ese gorro te sienta de lujo!', '¿Bailamos?', '¡hip!', '¡otra ronda!', '¡Yo con el de la barra!', '¡Qué calor hace aquí!', '¡Mira, pero no toques!'];
+  // Mamá Noel va de fiesta y avisa de los peligros del grupo: añade o cambia nombres a tu gusto.
+  var FRASES_MAMA = ['¡Cuidado con Sergio!', '¡Cuidado con Puli!', '¡Cuidado con Goria!', '¿Me invitas a un Jäger?', '¡Hoy no duermo sola!', '¿Quién me invita?', '¡Sujétame el cubata, guapo!', '¿Bailamos?', '¡Yo con el de la barra!', '¡Mi marido no se entera!', '¡Qué calor hace aquí!', '¡Ese gorro te sienta de lujo!', '¡hip!', '¡otra ronda!'];
   var MAMA = '<svg viewBox="0 0 74 104" width="64" height="90" focusable="false">' +
     '<ellipse cx="26" cy="99" rx="8" ry="4" fill="#2b1a14"/><ellipse cx="47" cy="99" rx="8" ry="4" fill="#2b1a14"/>' +
     '<path d="M24 47 Q36 41 48 47 L62 91 Q36 99 10 91 Z" fill="#D4283C"/>' +
