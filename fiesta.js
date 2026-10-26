@@ -73,6 +73,7 @@
       sa.setAttribute('aria-hidden', 'true');
       sa.addEventListener('animationend', function (e) { if (e.animationName === 'paseo' || e.animationName === 'paseo-izq') sa.remove(); });
       document.body.appendChild(sa);
+      setTimeout(eructo, dur * 1000 * .3); // justo cuando le sale el bocadillo
     }, retardo);
   }
   // Cada cierto rato salen entre 1 y 3 Papás Noel (más y más seguidos en modo discoteca).
@@ -89,8 +90,8 @@
     }, 3000);
   }
 
-  /* ---------- sonido: solo la sirena del premio gordo (siempre activo; no hay botón para silenciarlo) ---------- */
-  var ac = null, ultimoEructo = 0;
+  /* ---------- sonido (siempre activo; no hay botón para silenciarlo) ---------- */
+  var ac = null;
   // El navegador solo deja sonar después de que la persona haya tocado la pantalla alguna vez.
   function puedeSonar() { return !navigator.userActivation || navigator.userActivation.hasBeenActive; }
   function contexto() {
@@ -107,6 +108,29 @@
     var c = contexto();
     if (!c) return;
     try { var s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); } catch (e) { /* da igual */ }
+    cargarEructo();
+  }
+  // Eructo real (sonidos/eructo.mp3, BigSoundBank, CC0). Se descarga y decodifica tras el primer toque.
+  var bufEructo = null, cargandoEructo = false, ultimoEructo = 0;
+  function cargarEructo() {
+    var c = ac;
+    if (bufEructo || cargandoEructo || !c || !window.fetch) return;
+    cargandoEructo = true;
+    fetch('sonidos/eructo.mp3').then(function (r) { return r.arrayBuffer(); })
+      .then(function (b) { return new Promise(function (ok, ko) { c.decodeAudioData(b, ok, ko); }); })
+      .then(function (b) { bufEructo = b; }, function () { cargandoEructo = false; });
+  }
+  function eructo(forzar) {
+    if (!forzar && (!puedeSonar() || Date.now() - ultimoEructo < 2500)) return;
+    var c = contexto();
+    if (!c) return;
+    if (!bufEructo) { cargarEructo(); return; }
+    ultimoEructo = Date.now();
+    try {
+      var s = c.createBufferSource(), g = c.createGain();
+      s.buffer = bufEructo; g.gain.value = .8;
+      s.connect(g); g.connect(c.destination); s.start(0);
+    } catch (e) { /* da igual */ }
   }
   ['pointerdown', 'touchend', 'click', 'keydown'].forEach(function (ev) {
     document.addEventListener(ev, function f() { desbloquear(); document.removeEventListener(ev, f, true); }, true);
@@ -126,6 +150,7 @@
     }
     document.body.appendChild(caja);
     setTimeout(function () { caja.remove(); }, 1900);
+    eructo(true);
     try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* sin vibración */ }
   }
   document.addEventListener('click', function (e) {
@@ -203,5 +228,5 @@
     setTimeout(function () { if (document.getElementById('gordo') === g) cerrar(); }, 11000);
   }
 
-  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar };
+  window.NPGFIESTA = { disco: disco, aplicar: aplicar, santa: santa, gordo: mostrar, eructo: eructo };
 })();

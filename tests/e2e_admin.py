@@ -55,6 +55,8 @@ with sync_playwright() as p:
     n0=pg.locator('.santa').count()
     pg.evaluate("document.querySelector('.santa svg').dispatchEvent(new MouseEvent('click',{bubbles:true}))"); pg.wait_for_timeout(300)
     check('tocar un Papá Noel lo hace explotar con un taco', pg.locator('.pum .taco').count()==1 and pg.locator('.pum .taco').text_content() in ('¡Hijo de puta!','¡Cabrón!','¡Guarro!') and pg.locator('.santa').count()==n0-1)
+    pg.wait_for_timeout(800)
+    check('el eructo real se descarga tras el primer toque', pg.evaluate("performance.getEntriesByType('resource').some(function(r){return r.name.indexOf('sonidos/eructo.mp3')>-1})"))
     check('no hay botón para silenciar', pg.locator('.snd').count()==0)
     pg.click('nav >> text=Salir'); pg.wait_for_timeout(500)
     check('salir -> portada', pg.url.endswith('#/entrar') and 'Entrar como administrador' in pg.inner_text('#app'))
