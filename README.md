@@ -31,6 +31,10 @@ También funciona abriendo `index.html` directamente.
 - Los retos son los 12 de la primera iteración (faltan unos 18 para el pool de 30).
 - No hay reparto equilibrado por dificultad y franja.
 
+## Backend (preparado, sin conectar)
+
+`supabase/schema.sql` define tablas, RLS, funciones (sorteo del jurado, valoración, reparto de cartones) y el bucket privado de fotos. Ya está aplicado en el proyecto de Supabase y los ajustes públicos están en `config.js`. La app sigue en modo PoC (localStorage) hasta que se conecte el login con usuarios reales.
+
 ## Publicar en GitHub Pages
 
 En *Settings → Pages* elige *Deploy from a branch*, rama `main` y carpeta `/ (root)`. GitHub despliega solo en cada push, sin workflow propio. En repos privados, Pages requiere un plan de pago.
