@@ -55,3 +55,7 @@ El simulador reproduce las reglas de RLS y las funciones del esquema; no sustitu
 
 ## Pendiente
 
+## Fiesta (solo presentación, `fiesta.js`)
+- **Modo discoteca:** del 26 dic 18:00 al 27 dic 08:00 (`data.js` → `EVENTO.discoDesde/discoHasta`): luces, bola de espejos, logo con neón y lluvia de chupitos, cañas y botellas. Para verlo antes: añade `?disco` a la dirección (`?disco=0` lo apaga).
+- **Premio gordo:** cuando sale un ganador nuevo (línea, bingo o reto premium) a todos los que tengan la app abierta les salta una pantalla con confeti, sirena y el nombre. Se muestra una vez por navegador. Para probarla: `?demo=gordo`.
+- **Papá Noel borracho:** cruza la pantalla cada ~40-70 s. Se desactiva con «reducir movimiento» del sistema.

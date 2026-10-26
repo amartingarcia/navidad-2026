@@ -11,7 +11,7 @@ m.cartones[amos]=['1','3','4','5','2','7','8','9','6']
 m.jurado=[adm,chuchi,casi]
 m.jug[chuchi]['cambio_pass']=False; m.users[chuchi]['pass']='ChuchiPass-1'
 def user(b,hashpart):
-    ctx=b.new_context(viewport={'width':390,'height':800}); pg=ctx.new_page(); errs=[]
+    ctx=b.new_context(viewport={'width':390,'height':800}); ctx.add_init_script("document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('style');s.textContent='#gordo{display:none!important}';document.head.appendChild(s)})"); pg=ctx.new_page(); errs=[]
     pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.on('console',lambda c: errs.append(c.text) if c.type=='error' and 'ERR_TUNNEL' not in c.text and 'status of 400' not in c.text else None)
     install(pg,m,HOST); pg.goto(BASE+hashpart); pg.wait_for_timeout(500); return pg,errs
@@ -77,7 +77,10 @@ with sync_playwright() as p:
     S2.goto(BASE+'#/jurado'); S2.wait_for_timeout(700)
     S2.click('button:has-text("Es válido")'); S2.wait_for_timeout(900)
     check('2 de 3 => linea concedida', m.cantos[0]['estado']=='ok' and len(m.gan['linea'])==1)
-    A.goto(BASE+'#/premios'); A.wait_for_timeout(500); A.reload(); A.wait_for_timeout(900)
+    A.goto(BASE+'#/premios'); A.wait_for_timeout(900)
+    check('premio gordo: sale la pantalla de ganador con el nombre', A.locator('#gordo').count()==1 and 'Amós' in A.locator('#gordo').text_content() and '¡LÍNEA!' in A.locator('#gordo').text_content())
+    A.reload(); A.wait_for_timeout(900)
+    check('premio gordo no se repite al recargar', A.locator('#gordo').count()==0)
     check('podio con el nombre del ganador en 1ª linea', A.locator('.podio li.gana').count()==1 and 'Amós' in A.inner_text('.podio li.gana') and '1ª línea' in A.inner_text('.podio li.gana') and True)
     A.goto(BASE+'#/carton'); A.wait_for_timeout(500)
     check('ya no puede cantar linea otra vez', 'Cantar línea' not in A.inner_text('#app'))

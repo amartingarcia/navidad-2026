@@ -97,9 +97,40 @@
           nuevo.photos.map(function (f) { return [f.id, f.status, f.por]; })]);
         var cambio = nuevo.firma !== S.firma;
         S = nuevo;
+        detectarGanadores();
         return cambio;
       });
     });
+  }
+
+  /* ---------- premio gordo: avisa a todos cuando sale un ganador nuevo ---------- */
+  var vistos = null; // claves de ganadores ya vistos en este navegador (se guardan por usuario)
+  function guardarVistos() { try { localStorage.setItem('npgingo.vistos.' + S.me.id, JSON.stringify(vistos)); } catch (e) { /* sin almacenamiento */ } }
+  function detectarGanadores() {
+    var todos = [], clave = function (g) { return g.tipo + '|' + g.reto + '|' + g.puesto; };
+    ['linea', 'bingo'].forEach(function (t) { S.ganadores[t].forEach(function (g) { todos.push({ tipo: t, reto: '', puesto: g.puesto, playerId: g.playerId }); }); });
+    Object.keys(S.ganadores.premium).forEach(function (rid) {
+      S.ganadores.premium[rid].forEach(function (g) { todos.push({ tipo: 'premium', reto: rid, puesto: g.puesto, playerId: g.playerId }); });
+    });
+    if (vistos === null) {
+      try { vistos = JSON.parse(localStorage.getItem('npgingo.vistos.' + S.me.id)); } catch (e) { vistos = null; }
+      if (!Array.isArray(vistos)) { vistos = todos.map(clave); guardarVistos(); return; } // primera vez: lo que ya había no se celebra
+    }
+    var nuevos = todos.filter(function (g) { return vistos.indexOf(clave(g)) < 0; });
+    if (!nuevos.length) return;
+    vistos = vistos.concat(nuevos.map(clave)); guardarVistos();
+    nuevos.forEach(function (g) { window.NPGFIESTA.gordo(describirGanador(g)); });
+  }
+  function describirGanador(g) {
+    var lista = g.tipo === 'premium' ? S.premios.premium[g.reto] || [] : S.premios[g.tipo];
+    var pr = lista.filter(function (x) { return x.puesto === g.puesto; })[0];
+    var r = g.tipo === 'premium' ? reto(g.reto) : null;
+    return {
+      icono: r ? r.icono : g.tipo === 'bingo' ? '🏆' : ['🥇', '🥈', '🥉'][g.puesto - 1] || '🎖️',
+      titulo: g.tipo === 'bingo' ? '¡BINGO!' : g.tipo === 'linea' ? '¡LÍNEA!' : esc(r.titulo.toUpperCase()),
+      sub: g.tipo === 'linea' ? g.puesto + 'ª línea' : g.tipo === 'bingo' ? 'Bingo' : 'Reto premium',
+      nombre: esc(jugador(g.playerId).name), premio: pr && pr.premio ? esc(pr.premio) : ''
+    };
   }
 
   /* ---------- lógica del juego ---------- */
@@ -473,7 +504,7 @@
     if (S.me.cambio) { nieve(true); $app.innerHTML = vClave(); return; }
     if (['', 'entrar', 'acceso', 'clave'].indexOf(r.nombre) !== -1) { location.hash = '#/carton'; return; }
 
-    nieve(false);
+    nieve(window.NPGFIESTA.disco(), true);
     var nombre = r.nombre;
     if (nombre === 'admin' && !soyAdmin()) nombre = 'carton';
     if (nombre === 'jurado' && !soyJurado()) nombre = 'carton';
@@ -515,7 +546,7 @@
   function salir() {
     clearInterval(poll);
     return API.salir().then(function () {
-      S = vacio();
+      S = vacio(); vistos = null;
       L = { token: '', nombre: null, estado: '', error: '', ocupado: false };
       msgPass = '';
       location.hash = '#/entrar'; render();
@@ -727,7 +758,7 @@
 
   /* ---------- nevada (solo en la pantalla de entrada) ---------- */
   // Cae nieve y, entre los copos, estrellas de hilo, botellitas verdes y cámaras de fotos.
-  var nv = { on: false, parts: [], raf: 0, w: 0, h: 0, dpr: 1, sprites: null };
+  var nv = { on: false, modo: '', vel: 1, parts: [], raf: 0, w: 0, h: 0, dpr: 1, sprites: null };
 
   // Sprites dibujados a mano (vectoriales, sin logos) en un canvas aparte y reutilizados en cada frame.
   function sprite(ancho, alto, dibujo, dpr) {
@@ -763,6 +794,32 @@
         x.fillStyle = '#F4B93E'; rect(x, 3.4, 16, 7.2, 7, 1); x.fill();            // etiqueta
         x.fillStyle = 'rgba(255,255,255,.35)'; rect(x, 3.6, 12.5, 1.2, 12, .6); x.fill(); // brillo
       }, dpr),
+      // Chupito: vaso pequeño y ancho por arriba, con licor ámbar.
+      chupito: sprite(16, 20, function (x) {
+        x.fillStyle = 'rgba(220,235,250,.75)';
+        x.beginPath(); x.moveTo(1.5, 2); x.lineTo(14.5, 2); x.lineTo(12.6, 18); x.lineTo(3.4, 18); x.closePath(); x.fill();
+        x.fillStyle = '#E8912E';
+        x.beginPath(); x.moveTo(2.4, 6.5); x.lineTo(13.6, 6.5); x.lineTo(12.3, 17); x.lineTo(3.7, 17); x.closePath(); x.fill();
+        x.fillStyle = 'rgba(255,255,255,.55)'; rect(x, 3.4, 3, 1.4, 11, .7); x.fill();
+      }, dpr),
+      // Caña de cerveza: jarra con asa, líquido dorado y espuma.
+      cana: sprite(24, 24, function (x) {
+        x.strokeStyle = '#d7dfeb'; x.lineWidth = 2.2; x.beginPath(); x.arc(19.5, 13, 4, -1.4, 1.4); x.stroke(); // asa
+        x.fillStyle = 'rgba(220,235,250,.8)'; rect(x, 3, 5, 15, 17, 2.5); x.fill();
+        x.fillStyle = '#F4B93E'; rect(x, 4.2, 8, 12.6, 12.8, 1.6); x.fill();
+        x.fillStyle = '#F4F7FB';
+        [6.5, 10.5, 14.5].forEach(function (cx) { x.beginPath(); x.arc(cx, 6, 3.2, 0, 6.2832); x.fill(); });
+        x.fillStyle = 'rgba(255,255,255,.5)'; rect(x, 5.2, 9, 1.3, 10, .6); x.fill();
+      }, dpr),
+      // Bolita de espejos en miniatura.
+      bola: sprite(20, 24, function (x) {
+        x.strokeStyle = '#9FB0C7'; x.lineWidth = 1; x.beginPath(); x.moveTo(10, 0); x.lineTo(10, 4); x.stroke();
+        var g = x.createRadialGradient(8, 11, 1, 10, 14, 9);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#7f93b2');
+        x.fillStyle = g; x.beginPath(); x.arc(10, 14, 8.5, 0, 6.2832); x.fill();
+        x.strokeStyle = 'rgba(19,35,59,.35)'; x.lineWidth = .8;
+        for (var i = -2; i <= 2; i++) { x.beginPath(); x.moveTo(1.5, 14 + i * 3.2); x.lineTo(18.5, 14 + i * 3.2); x.stroke(); x.beginPath(); x.moveTo(10 + i * 3.4, 5.5); x.lineTo(10 + i * 3.4, 22.5); x.stroke(); }
+      }, dpr),
       // Cámara de fotos: cuerpo claro, objetivo oscuro con aro rojo y botón.
       camara: sprite(28, 22, function (x) {
         x.fillStyle = '#d7dfeb'; rect(x, 1.5, 5, 25, 15, 3); x.fill();
@@ -791,16 +848,19 @@
       e: .85 + Math.random() * .5
     };
   }
-  function nieve(on) {
+  function nieve(on, ligero) {
     var cv = document.getElementById('nieve');
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) on = false;
-    if (on === nv.on) return;
-    nv.on = on;
+    var disco = window.NPGFIESTA.disco(), modo = on ? (disco ? 'd' : 'n') + (ligero ? 'l' : '') : '';
+    if (modo === nv.modo) return;
+    nv.modo = modo; cancelAnimationFrame(nv.raf);
+    nv.on = on; nv.vel = disco ? 1.7 : 1;
     if (!on) { cancelAnimationFrame(nv.raf); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); return; }
     var ctx = ajustarNevada();
     nv.sprites = crearSprites(nv.dpr);
     nv.parts = [];
-    var mezcla = { copo: 70, estrella: 9, botella: 5, camara: 5 };
+    var mezcla = disco ? (ligero ? { estrella: 3, botella: 5, chupito: 5, cana: 3, bola: 2 } : { copo: 14, estrella: 8, botella: 14, chupito: 14, cana: 8, camara: 3, bola: 4 })
+      : { copo: 70, estrella: 9, botella: 5, camara: 5 };
     Object.keys(mezcla).forEach(function (t) { for (var i = 0; i < mezcla[t]; i++) nv.parts.push(particula(t, false)); });
     window.removeEventListener('resize', nv.onResize);
     nv.onResize = function () { if (nv.on) { ctx = ajustarNevada(); nv.sprites = crearSprites(nv.dpr); } };
@@ -809,7 +869,7 @@
       ctx.setTransform(nv.dpr, 0, 0, nv.dpr, 0, 0);
       ctx.clearRect(0, 0, nv.w, nv.h);
       nv.parts.forEach(function (c) {
-        c.y += c.v; c.x += Math.sin(t / 1200 + c.o) * (c.tipo === 'copo' ? .4 : .3);
+        c.y += c.v * nv.vel; c.x += Math.sin(t / 1200 + c.o) * (c.tipo === 'copo' ? .4 : .3);
         if (c.y > nv.h + 30) { var n = particula(c.tipo, true); for (var k in n) c[k] = n[k]; }
         if (c.tipo === 'copo') {
           ctx.fillStyle = 'rgba(244,247,251,.85)';
@@ -843,7 +903,13 @@
 
   /* ---------- arranque ---------- */
   if (!location.hash) location.hash = '#/entrar';
+  window.NPGFIESTA.aplicar();
   render();
+  window.NPGFIESTA.santa();
+  setInterval(function () { if (window.NPGFIESTA.aplicar()) render(true); }, 30000); // el modo discoteca se enciende solo a su hora
+  if (/[?&]demo=gordo/.test(location.search)) {
+    setTimeout(function () { window.NPGFIESTA.gordo({ icono: '🏆', titulo: '¡BINGO!', sub: 'Bingo', nombre: 'Amós', premio: 'Una cena para dos' }); }, 1500);
+  }
   API.restaurar().then(function (ses) {
     if (ses) return arrancar();
     render();
