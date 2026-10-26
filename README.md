@@ -18,7 +18,7 @@ También funciona abriendo `index.html` directamente.
 - Pantalla de entrada con enlace personal (`#/entrar/<token>`): usuario, contraseña provisional y cambio obligatorio.
 - Cartón 3x3 con la casilla central fija (manteo a Maritsu) y 8 retos por jugador, repartidos de forma determinista.
 - Subida de foto por reto (cámara del móvil), con compresión en el cliente.
-- Línea y bingo se cantan con foto, como cualquier otro reto: al completar una línea o los 9 sellos aparece el botón, subes la foto y el jurado la valida (ve las fotos del cartón para comprobarla). El primero en ser validado gana.
+- La línea es una fila horizontal (no valen columnas ni diagonales) y se marca con una barra dorada en el cartón. Línea y bingo se cantan con foto, como cualquier otro reto: al completar una línea o los 9 sellos aparece el botón, subes la foto y el jurado la valida (ve las fotos del cartón para comprobarla). El primero en ser validado gana.
 - Admin: es un jugador más (tiene cartón) con funciones especiales: sorteo del jurado y enlaces personales.
 - Jurado: 2 jugadores al azar más el admin (3 en total). Los elegidos ven un banner en su cartón y una pestaña «Jurado» para validar las fotos de los demás (nunca las suyas).
 - Instalable en el móvil (manifest + iconos): «Añadir a pantalla de inicio» en Safari o Chrome.

@@ -6,7 +6,8 @@
   var RETOS = N.RETOS;
   var KEY = 'npgingo.poc.v1';
   var JURADO_JUGADORES = 2; // más el admin: 3 en total
-  var LINEAS = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+  // Solo cuentan las filas horizontales: ni columnas ni diagonales.
+  var LINEAS = [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
   var $app = document.getElementById('app');
   var $modal = document.getElementById('modal');
   var $toast = document.getElementById('toast');
@@ -238,8 +239,12 @@
     h += banner();
     h += '<article class="ticket"><div class="ticket-top"><div><h2>Cartón de ' + esc(p.name) + '</h2><small>Quedada de Navidad · 26 dic 2026</small></div>' +
       '<div class="serie" aria-label="Número de cartón">Nº ' + String(p.id).padStart(3, '0') + '</div></div><div class="perf"></div>' +
-      '<div class="progreso"><span>' + n + ' de 9 sellos validados</span><span>Pulsa un reto para subir la foto</span></div><div class="grid">';
-    c.forEach(function (rid) {
+      '<div class="progreso"><span>' + n + ' de 9 sellos validados</span><span>Línea = una fila horizontal</span></div><div class="grid">';
+    c.forEach(function (rid, i) {
+      if (i % 3 === 0) {
+        var k = i / 3, hecha = lineas.some(function (l) { return l[0] === i; });
+        h += '<div class="hilera' + (hecha ? ' completa' : '') + '" role="group" aria-label="Fila ' + (k + 1) + (hecha ? ', completa' : '') + '"><span class="marca" aria-hidden="true"></span>';
+      }
       var r = reto(rid), f = estadoReto(p.id, rid), cls = 'celda';
       if (r.fijo) cls += ' centro';
       if (r.tipo === 'grupal') cls += ' grupal';
@@ -252,6 +257,7 @@
       h += '<button class="' + cls + '" data-acc="reto" data-id="' + rid + '" aria-label="' + esc(r.titulo + etiqueta) + '">' +
         (f ? '<span class="foto" style="' + urlBg(f.img) + '"></span>' : '') +
         '<span class="ico" aria-hidden="true">' + r.icono + '</span><span class="tit">' + esc(r.titulo) + '</span>' + sello + '</button>';
+      if (i % 3 === 2) h += '</div>';
     });
     h += '</div></article><div class="acciones">';
     function botonCanto(tipo, texto) {

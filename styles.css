@@ -82,7 +82,10 @@ button { cursor: pointer; }
 .perf::before { left: -29px; }
 .perf::after { right: -29px; }
 .progreso { padding: 12px 18px 0; display: flex; justify-content: space-between; font-size: 13px; color: #4a5c75; }
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 18px 0; }
+.grid { display: flex; flex-direction: column; gap: 8px; padding: 12px 18px 0; }
+.hilera { display: grid; grid-template-columns: 8px repeat(3, 1fr); gap: 8px; }
+.marca { border-radius: 4px; background: #d3dbe7; }
+.hilera.completa .marca { background: var(--oro); box-shadow: 0 0 0 2px #fff0c9; }
 .celda { position: relative; aspect-ratio: 1; border: 2px solid var(--tinta); border-radius: 12px; background: #fff; color: var(--tinta); padding: 8px 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; overflow: hidden; }
 .celda:hover { background: #fff7e0; }
 .celda .ico { position: relative; font-size: 26px; line-height: 1; }
@@ -148,6 +151,7 @@ dialog::backdrop { background: rgba(6, 12, 22, .75); }
 @media (min-width: 700px) {
   #app { padding-top: 36px; }
   .grid { gap: 10px; }
+  .hilera { gap: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   #toast { transition: none; }
