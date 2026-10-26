@@ -40,3 +40,11 @@ insert into public.retos (id, icono, titulo, franja, tipo, fijo, pista, desde, h
 on conflict (id) do update set
   icono = excluded.icono, titulo = excluded.titulo, franja = excluded.franja, tipo = excluded.tipo,
   fijo = excluded.fijo, pista = excluded.pista, desde = excluded.desde, hasta = excluded.hasta;
+
+-- Premium challenges: outside the cards, anyone can try them; the first one the jury approves (2 of 3) wins.
+-- Add ids here to make more. Each one gets its own prize line (editable from Admin > Premios).
+update public.retos set premium = (id in ('31'));
+insert into public.premios (tipo, reto, puesto)
+  select 'premium', id, 1 from public.retos where premium
+  on conflict (tipo, reto, puesto) do nothing;
+delete from public.premios where tipo = 'premium' and reto not in (select id from public.retos where premium);

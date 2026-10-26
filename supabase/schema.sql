@@ -112,27 +112,28 @@ create table if not exists public.reacciones (
 -- Prizes in play, one row per podium place: 1st/2nd/3rd line and the bingo. `premio` null = still to be decided.
 -- The number of rows of each type is the number of prizes available (the admin edits the text with definir_premio).
 create table if not exists public.premios (
-  tipo   text not null check (tipo in ('linea','bingo')),
+  tipo   text not null check (tipo in ('linea','bingo','premium')),
+  reto   text not null default '',                 -- premium challenge id ('' for línea / bingo)
   puesto smallint not null check (puesto > 0),
   premio text,
-  primary key (tipo, puesto)
+  primary key (tipo, reto, puesto)
 );
-insert into public.premios (tipo, puesto) values ('linea', 1), ('linea', 2), ('linea', 3), ('bingo', 1)
-  on conflict (tipo, puesto) do nothing;
+-- (the premium challenges' prizes are created by retos.sql, one per challenge)
 
 -- A "canto" = a player shouting línea/bingo. No photo: the jury checks the player's validated photos
 -- (3 of the row for a línea, all 9 for a bingo) and needs 2 approvals to accept it.
 create table if not exists public.cantos (
   id           uuid primary key default gen_random_uuid(),
   jugador_id   uuid not null references public.jugadores(id) on delete cascade,
-  tipo         text not null check (tipo in ('linea','bingo')),
+  tipo         text not null check (tipo in ('linea','bingo','premium')),
   fila         smallint check (fila between 0 and 2),            -- row (0-based) for 'linea'
+  reto         text references public.retos(id) on delete cascade, -- premium challenge for 'premium'
   estado       text not null default 'pend' check (estado in ('pend','ok','ko')),
   creada       timestamptz not null default now(),
   resuelta_en  timestamptz,
-  check ((tipo = 'linea') = (fila is not null))
+  constraint cantos_fila_ck check ((tipo = 'linea') = (fila is not null)),
+  constraint cantos_reto_ck check ((tipo = 'premium') = (reto is not null))
 );
-create unique index if not exists cantos_un_pendiente on public.cantos (jugador_id, tipo) where estado = 'pend';
 
 create table if not exists public.votos (
   canto_id  uuid not null references public.cantos(id) on delete cascade,
@@ -144,12 +145,48 @@ create table if not exists public.votos (
 
 create table if not exists public.ganadores (
   canto_id   uuid primary key references public.cantos(id) on delete cascade,
-  tipo       text not null check (tipo in ('linea','bingo')),
+  tipo       text not null check (tipo in ('linea','bingo','premium')),
+  reto       text not null default '',
   puesto     smallint not null check (puesto > 0),
   jugador_id uuid not null references public.jugadores(id) on delete cascade,
   creada     timestamptz not null default now(),
-  unique (tipo, puesto)
+  constraint ganadores_unico unique (tipo, reto, puesto)
 );
+
+-- Migration v2 -> v3 (idempotent): premium challenges + prizes per challenge.
+alter table public.retos add column if not exists premium boolean not null default false;  -- outside the cards, first to win takes the prize
+do $$
+begin
+  alter table public.premios add column if not exists reto text not null default '';
+  alter table public.premios drop constraint if exists premios_pkey;
+  alter table public.premios drop constraint if exists premios_tipo_check;
+  alter table public.premios add constraint premios_tipo_check check (tipo in ('linea','bingo','premium'));
+  if not exists (select 1 from pg_constraint where conrelid = 'public.premios'::regclass and contype = 'p') then
+    alter table public.premios add primary key (tipo, reto, puesto);
+  end if;
+
+  alter table public.cantos add column if not exists reto text references public.retos(id) on delete cascade;
+  alter table public.cantos drop constraint if exists cantos_tipo_check;
+  alter table public.cantos add constraint cantos_tipo_check check (tipo in ('linea','bingo','premium'));
+  alter table public.cantos drop constraint if exists cantos_check;
+  alter table public.cantos drop constraint if exists cantos_fila_ck;
+  alter table public.cantos add constraint cantos_fila_ck check ((tipo = 'linea') = (fila is not null));
+  alter table public.cantos drop constraint if exists cantos_reto_ck;
+  alter table public.cantos add constraint cantos_reto_ck check ((tipo = 'premium') = (reto is not null));
+
+  alter table public.ganadores add column if not exists reto text not null default '';
+  alter table public.ganadores drop constraint if exists ganadores_tipo_puesto_key;
+  alter table public.ganadores drop constraint if exists ganadores_tipo_check;
+  alter table public.ganadores add constraint ganadores_tipo_check check (tipo in ('linea','bingo','premium'));
+  alter table public.ganadores drop constraint if exists ganadores_unico;
+  alter table public.ganadores add constraint ganadores_unico unique (tipo, reto, puesto);
+end $$;
+drop index if exists public.cantos_un_pendiente;
+create unique index if not exists cantos_un_pendiente_v3 on public.cantos (jugador_id, tipo, (coalesce(reto, ''))) where estado = 'pend';
+insert into public.premios (tipo, puesto) values ('linea', 1), ('linea', 2), ('linea', 3), ('bingo', 1)
+  on conflict (tipo, reto, puesto) do nothing;
+drop function if exists public.cantar(text);
+drop function if exists public.definir_premio(text, int, text);
 
 -- Challenges live in supabase/retos.sql (run it after this file, before dealing the cards).
 -- ───────────────────────── Helpers ─────────────────────────
@@ -230,41 +267,52 @@ begin
   where id = p_foto;
 end $$;
 
--- A player shouts línea (needs a complete row of validated photos) or bingo (all 9 validated).
-create or replace function public.cantar(p_tipo text) returns uuid
+-- A player shouts línea (a complete row of photos), bingo (all 9) or claims a premium challenge (p_reto) they
+-- have already uploaded the proof for. No photo goes with the canto itself; the jury votes on it.
+create or replace function public.cantar(p_tipo text, p_reto text default null) returns uuid
 language plpgsql security definer set search_path = public as $$
-declare c text[]; v_fila int := null; v_cupo int; v_id uuid; i int;
+declare c text[]; v_fila int := null; v_cupo int; v_id uuid; i int; v_reto text := coalesce(p_reto, '');
 begin
   if auth.uid() is null then raise exception 'Sin sesión'; end if;
-  if p_tipo not in ('linea','bingo') then raise exception 'Tipo no válido'; end if;
-  select celdas into c from cartones where jugador_id = auth.uid();
-  if c is null then raise exception 'Todavía no tienes cartón'; end if;
-  select count(*) into v_cupo from premios pr where pr.tipo = p_tipo;
-  if (select count(*) from ganadores g where g.tipo = p_tipo) >= v_cupo then
+  if p_tipo not in ('linea','bingo','premium') then raise exception 'Tipo no válido'; end if;
+  if (p_tipo = 'premium') <> (p_reto is not null) then raise exception 'Tipo no válido'; end if;
+  if p_tipo = 'premium' and not exists (select 1 from retos r where r.id = p_reto and r.premium) then
+    raise exception 'Ese reto no es premium';
+  end if;
+  select count(*) into v_cupo from premios pr where pr.tipo = p_tipo and pr.reto = v_reto;
+  if (select count(*) from ganadores g where g.tipo = p_tipo and g.reto = v_reto) >= v_cupo then
     raise exception 'Ya se han llevado todos los premios de este tipo';
   end if;
-  if exists (select 1 from ganadores g where g.tipo = p_tipo and g.jugador_id = auth.uid()) then
+  if exists (select 1 from ganadores g where g.tipo = p_tipo and g.reto = v_reto and g.jugador_id = auth.uid()) then
     raise exception 'Ya has ganado esto';
   end if;
-  if exists (select 1 from cantos k where k.jugador_id = auth.uid() and k.tipo = p_tipo and k.estado = 'pend') then
+  if exists (select 1 from cantos k where k.jugador_id = auth.uid() and k.tipo = p_tipo and coalesce(k.reto, '') = v_reto and k.estado = 'pend') then
     raise exception 'Ya lo has cantado: espera al jurado';
   end if;
 
-  if p_tipo = 'linea' then
-    for i in 0..2 loop
-      if (select count(*) from fotos f
-          where f.jugador_id = auth.uid() and f.estado = 'ok'
-            and f.reto = any (array[c[i * 3 + 1], c[i * 3 + 2], c[i * 3 + 3]])) = 3 then
-        v_fila := i; exit;
-      end if;
-    end loop;
-    if v_fila is null then raise exception 'No tienes ninguna fila completa'; end if;
-  elsif (select count(distinct f.reto) from fotos f
-         where f.jugador_id = auth.uid() and f.estado = 'ok' and f.reto = any (c)) < 9 then
-    raise exception 'Te faltan sellos para el bingo';
+  if p_tipo = 'premium' then
+    if not exists (select 1 from fotos f where f.jugador_id = auth.uid() and f.reto = p_reto and f.estado = 'ok') then
+      raise exception 'Primero sube la prueba';
+    end if;
+  else
+    select celdas into c from cartones where jugador_id = auth.uid();
+    if c is null then raise exception 'Todavía no tienes cartón'; end if;
+    if p_tipo = 'linea' then
+      for i in 0..2 loop
+        if (select count(*) from fotos f
+            where f.jugador_id = auth.uid() and f.estado = 'ok'
+              and f.reto = any (array[c[i * 3 + 1], c[i * 3 + 2], c[i * 3 + 3]])) = 3 then
+          v_fila := i; exit;
+        end if;
+      end loop;
+      if v_fila is null then raise exception 'No tienes ninguna fila completa'; end if;
+    elsif (select count(distinct f.reto) from fotos f
+           where f.jugador_id = auth.uid() and f.estado = 'ok' and f.reto = any (c)) < 9 then
+      raise exception 'Te faltan sellos para el bingo';
+    end if;
   end if;
 
-  insert into cantos (jugador_id, tipo, fila) values (auth.uid(), p_tipo, v_fila) returning id into v_id;
+  insert into cantos (jugador_id, tipo, fila, reto) values (auth.uid(), p_tipo, v_fila, p_reto) returning id into v_id;
   return v_id;
 end $$;
 
@@ -288,14 +336,14 @@ begin
   select count(*) into v_elegibles from jurado j where j.jugador_id <> k.jugador_id;
 
   if v_si >= 2 then
-    select count(*) into v_cupo from premios pr where pr.tipo = k.tipo;
-    select count(*) into v_ocupados from ganadores g where g.tipo = k.tipo;
+    select count(*) into v_cupo from premios pr where pr.tipo = k.tipo and pr.reto = coalesce(k.reto, '');
+    select count(*) into v_ocupados from ganadores g where g.tipo = k.tipo and g.reto = coalesce(k.reto, '');
     if v_ocupados < v_cupo then
-      insert into ganadores (canto_id, tipo, puesto, jugador_id) values (k.id, k.tipo, v_ocupados + 1, k.jugador_id);
+      insert into ganadores (canto_id, tipo, reto, puesto, jugador_id) values (k.id, k.tipo, coalesce(k.reto, ''), v_ocupados + 1, k.jugador_id);
       update cantos set estado = 'ok', resuelta_en = now() where id = k.id;
       v_estado := 'ok';
       if v_ocupados + 1 >= v_cupo then
-        update cantos set estado = 'ko', resuelta_en = now() where tipo = k.tipo and estado = 'pend';
+        update cantos set estado = 'ko', resuelta_en = now() where tipo = k.tipo and coalesce(reto, '') = coalesce(k.reto, '') and estado = 'pend';
       end if;
     else
       update cantos set estado = 'ko', resuelta_en = now() where id = k.id;
@@ -310,12 +358,13 @@ end $$;
 
 -- ───────────────────────── Admin RPCs ─────────────────────────
 
--- Set the text of a prize (p_tipo 'linea'|'bingo', p_puesto 1..n). Empty text = still to be decided.
-create or replace function public.definir_premio(p_tipo text, p_puesto int, p_premio text) returns void
+-- Set the text of a prize (p_tipo 'linea'|'bingo'|'premium', p_puesto 1..n, p_reto for premium). Empty = to be decided.
+create or replace function public.definir_premio(p_tipo text, p_puesto int, p_premio text, p_reto text default '') returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if not es_admin() then raise exception 'Solo el admin'; end if;
-  update premios set premio = nullif(btrim(p_premio), '') where tipo = p_tipo and puesto = p_puesto;
+  update premios set premio = nullif(btrim(p_premio), '')
+   where tipo = p_tipo and puesto = p_puesto and reto = coalesce(p_reto, '');
   if not found then raise exception 'Ese premio no existe'; end if;
 end $$;
 
@@ -357,7 +406,7 @@ begin
   select r.id into v_fijo from retos r where r.fijo limit 1;
   for j in select id from jugadores loop
     select array_agg(id) into pool
-      from (select r.id from retos r where not r.fijo and r.tipo <> 'canto' order by random() limit 8) s;
+      from (select r.id from retos r where not r.fijo and not r.premium and r.tipo <> 'canto' order by random() limit 8) s;
     if cardinality(pool) < 8 then raise exception 'El pool tiene menos de 8 retos'; end if;
     insert into cartones (jugador_id, celdas) values (j.id, pool[1:4] || v_fijo || pool[5:8]);
     n := n + 1;
@@ -407,11 +456,11 @@ grant usage, select on all sequences in schema public to service_role;
 revoke all on function public.nombre_por_token(text) from public;
 grant execute on function public.nombre_por_token(text) to anon, authenticated;
 revoke all on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
-                       public.repartir_cartones(boolean), public.cantar(text), public.votar_canto(uuid, boolean),
-                       public.es_admin(), public.es_jurado(), public.resetear_pass(uuid), public.definir_premio(text, int, text) from public;
+                       public.repartir_cartones(boolean), public.cantar(text, text), public.votar_canto(uuid, boolean),
+                       public.es_admin(), public.es_jurado(), public.resetear_pass(uuid), public.definir_premio(text, int, text, text) from public;
 grant execute on function public.pass_cambiada(), public.valorar(uuid, boolean), public.sortear_jurado(),
-                          public.repartir_cartones(boolean), public.cantar(text), public.votar_canto(uuid, boolean),
-                          public.es_admin(), public.es_jurado(), public.resetear_pass(uuid), public.definir_premio(text, int, text) to authenticated;
+                          public.repartir_cartones(boolean), public.cantar(text, text), public.votar_canto(uuid, boolean),
+                          public.es_admin(), public.es_jurado(), public.resetear_pass(uuid), public.definir_premio(text, int, text, text) to authenticated;
 grant execute on all functions in schema public to service_role;
 
 drop policy if exists jugadores_leer on public.jugadores;
@@ -454,7 +503,8 @@ create policy fotos_subir on public.fotos for insert to authenticated
   with check (
     jugador_id = auth.uid()
     and ruta like auth.uid()::text || '/%'
-    and exists (select 1 from cartones c where c.jugador_id = auth.uid() and reto = any (c.celdas))
+    and (exists (select 1 from cartones c where c.jugador_id = auth.uid() and reto = any (c.celdas))
+         or exists (select 1 from retos r where r.id = reto and r.premium))
   );
 
 drop policy if exists fotos_borrar on public.fotos;
