@@ -30,7 +30,7 @@ Frontend estático (HTML, CSS y JS sin build) sobre Supabase (Auth, Postgres con
 
 ## Puesta en marcha
 
-1. Supabase: ejecutar `supabase/schema.sql` en el SQL Editor (idempotente).
+1. Supabase: ejecutar `supabase/schema.sql` y después `supabase/retos.sql` en el SQL Editor (ambos idempotentes).
 2. Supabase → Authentication: desactivar **Confirm email** y **Allow new users to sign up**; Site URL = URL de Vercel.
 3. Crear usuarios, desde tu máquina. Los secretos van en `supabase/.env` (ignorado por git; plantilla en `supabase/.env.example`) o como variables de entorno:
    ```bash
